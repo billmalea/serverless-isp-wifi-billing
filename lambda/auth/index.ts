@@ -275,8 +275,8 @@ async function handleValidate(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return errorResponse(HTTP_STATUS.FORBIDDEN, 'Session expired');
     }
 
-    // Get user
-    const user = await getItem<User>(USERS_TABLE, { phoneNumber: session.userId });
+    // Get user (lookup by actual phoneNumber stored in session)
+    const user = await getItem<User>(USERS_TABLE, { phoneNumber: session.phoneNumber });
 
     if (!user) {
       return errorResponse(HTTP_STATUS.NOT_FOUND, 'User not found');
@@ -307,12 +307,45 @@ async function handleValidate(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 async function handleStatus(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const phoneNumber = event.queryStringParameters?.phoneNumber;
   const userId = event.queryStringParameters?.userId;
+  const macAddress = event.queryStringParameters?.macAddress;
 
-  if (!phoneNumber && !userId) {
-    return errorResponse(HTTP_STATUS.BAD_REQUEST, 'Phone number or user ID required');
+  if (!phoneNumber && !userId && !macAddress) {
+    return errorResponse(HTTP_STATUS.BAD_REQUEST, 'Phone number, user ID, or MAC address required');
   }
 
   try {
+    // If MAC address provided, find session by device directly
+    if (macAddress) {
+      const session = await getActiveSessionForDevice(macAddress);
+      if (session) {
+        const user = await getItem<User>(USERS_TABLE, { phoneNumber: session.phoneNumber });
+        const timeRemaining = Math.max(0, Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000));
+        return successResponse({
+          userId: user?.userId,
+          phoneNumber: session.phoneNumber,
+          status: user?.status || 'active',
+          activeSessions: 1,
+          sessions: [{
+            sessionId: session.sessionId,
+            packageName: session.packageName,
+            macAddress: session.macAddress,
+            timeRemaining,
+            expiresAt: session.expiresAt,
+            bandwidthMbps: session.bandwidthMbps,
+          }],
+          createdAt: user?.createdAt,
+        });
+      } else {
+        return successResponse({
+          userId: null,
+          phoneNumber: null,
+          status: 'inactive',
+          activeSessions: 0,
+          sessions: [],
+        });
+      }
+    }
+
     let user: User | null;
 
     if (phoneNumber) {

@@ -5,6 +5,9 @@ const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || 'http://localhost:3000/d
 let selectedPackage = null;
 let currentTransaction = null;
 let paymentCheckInterval = null;
+let paymentPollAttempts = 0;
+let manualQueryPerformed = false;
+let lastUsedPhoneNumber = null;
 
 // Get device info
 function getDeviceInfo() {
@@ -53,7 +56,9 @@ function displayPackages(packages) {
     packages.forEach(pkg => {
         const card = document.createElement('div');
         card.className = 'package-card';
-        card.onclick = () => selectPackage(pkg);
+        card.tabIndex = 0;
+        card.onclick = (e) => selectPackage(pkg, e);
+        card.onkeyup = (e) => { if (e.key === 'Enter' || e.key === ' ') { selectPackage(pkg, e); } };        
         
         const isPopular = pkg.name === 'Standard';
         
@@ -73,37 +78,38 @@ function displayPackages(packages) {
 }
 
 // Select Package
-function selectPackage(pkg) {
+function selectPackage(pkg, e) {
     selectedPackage = pkg;
-    
-    // Update UI
-    document.querySelectorAll('.package-card').forEach(card => {
-        card.classList.remove('selected');
-    });
-    event.target.closest('.package-card').classList.add('selected');
-    
-    // Show payment form
-    document.getElementById('paymentForm').style.display = 'block';
-    document.getElementById('paymentForm').scrollIntoView({ behavior: 'smooth' });
+    // Clear selections
+    document.querySelectorAll('.package-card').forEach(card => card.classList.remove('selected'));
+    const targetCard = e.target.closest('.package-card');
+    if (targetCard) targetCard.classList.add('selected');
+    // Reveal payment form
+    const form = document.getElementById('paymentForm');
+    form.style.display = 'block';
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Initiate M-Pesa Payment
 async function initiatePayment() {
     const phoneInput = document.getElementById('phoneNumber');
     const phoneNumber = phoneInput.value.trim();
-    
+    lastUsedPhoneNumber = phoneNumber;
+    const payBtn = document.getElementById('payButton');
+
     if (!phoneNumber) {
         showToast('Please enter your phone number', 'error');
         return;
     }
-    
     if (!selectedPackage) {
         showToast('Please select a package', 'error');
         return;
     }
-    
+
+    // Set loading state
+    setButtonLoading(payBtn, 'Sending STK...');
+
     const deviceInfo = getDeviceInfo();
-    
     try {
         const response = await fetch(`${API_BASE_URL}/payment/initiate`, {
             method: 'POST',
@@ -114,47 +120,76 @@ async function initiatePayment() {
                 ...deviceInfo,
             }),
         });
-        
         const result = await response.json();
-        
         if (result.success) {
             currentTransaction = result.data;
             document.getElementById('processingPhone').textContent = formatPhoneNumber(phoneNumber);
             showScreen('processingScreen');
+            updateProcessingStep(0); // first step active
             startPaymentStatusCheck();
         } else {
             showToast(result.error || 'Payment initiation failed', 'error');
+            clearButtonLoading(payBtn);
         }
-    } catch (error) {
-        console.error('Payment error:', error);
+    } catch (err) {
+        console.error('Payment error:', err);
         showToast('Payment failed. Please try again.', 'error');
+        clearButtonLoading(payBtn);
     }
 }
 
-// Check Payment Status
+// Check Payment Status (with fallback + limits)
 async function checkPaymentStatus() {
     if (!currentTransaction) return;
-    
+    paymentPollAttempts++;
     try {
-        const response = await fetch(
-            `${API_BASE_URL}/payment/status?transactionId=${currentTransaction.transactionId}`
-        );
+        const response = await fetch(`${API_BASE_URL}/payment/status?transactionId=${currentTransaction.transactionId}`);
         const result = await response.json();
-        
-        if (result.success && result.data.status === 'completed') {
+        if (!result.success) return; // transient API issue
+        const status = result.data.status;
+
+        if (status === 'pending') {
+            updateProcessingStep(0);
+        } else if (status === 'completed') {
+            updateProcessingStep(2);
             stopPaymentStatusCheck();
-            showSuccessScreen(result.data);
-        } else if (result.data.status === 'failed') {
+            clearButtonLoading(document.getElementById('payButton'));
+            await fetchAndShowSuccess();
+            return;
+        } else if (status === 'failed') {
             stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
             showToast('Payment failed. Please try again.', 'error');
             showScreen('packagesScreen');
+            return;
+        } else if (status === 'cancelled') {
+            stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
+            showToast('Payment cancelled.', 'warning');
+            showScreen('packagesScreen');
+            return;
         }
-    } catch (error) {
-        console.error('Status check error:', error);
+
+        // Manual query fallback after 5 polls if still pending
+        if (status === 'pending' && paymentPollAttempts === 5 && !manualQueryPerformed) {
+            await manualQueryPayment();
+        }
+
+        // Hard timeout ~3 min (60 attempts at 3s)
+        if (paymentPollAttempts >= 60) {
+            stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
+            showToast('No confirmation received. Please retry payment.', 'warning');
+            showScreen('packagesScreen');
+        }
+    } catch (err) {
+        console.error('Status check error:', err);
     }
 }
 
 function startPaymentStatusCheck() {
+    paymentPollAttempts = 0;
+    manualQueryPerformed = false;
     paymentCheckInterval = setInterval(checkPaymentStatus, 3000);
 }
 
@@ -169,6 +204,7 @@ function cancelPayment() {
     stopPaymentStatusCheck();
     showScreen('packagesScreen');
     showToast('Payment cancelled', 'warning');
+    clearButtonLoading(document.getElementById('payButton'));
 }
 
 // Redeem Voucher
@@ -213,6 +249,7 @@ async function login() {
     const passwordInput = document.getElementById('loginPassword');
     
     const phoneNumber = phoneInput.value.trim();
+    lastUsedPhoneNumber = phoneNumber;
     const password = passwordInput.value;
     
     if (!phoneNumber) {
@@ -254,23 +291,18 @@ async function login() {
 
 // Show Success Screen
 function showSuccessScreen(data) {
-    // Update connection status
     const statusEl = document.getElementById('connectionStatus');
     statusEl.innerHTML = '<span class="status-dot connected"></span><span>Connected</span>';
-    
-    // Update session info (time-based)
-    const timeRemaining = data.timeRemaining || 0; // in seconds
+
+    const timeRemaining = data.timeRemaining || 0;
     const bandwidthMbps = data.bandwidthMbps || 0;
     const packageName = data.packageName || data.package || 'Unknown';
-    
-    // Update package info display
+
     document.getElementById('packageInfo').textContent = packageName;
     document.getElementById('timeBalance').textContent = formatTime(timeRemaining);
     document.getElementById('dataBalance').textContent = bandwidthMbps + ' Mbps';
-    
-    // Start countdown timer
+
     startCountdownTimer(timeRemaining);
-    
     showScreen('successScreen');
 }
 
@@ -278,54 +310,41 @@ function showSuccessScreen(data) {
 async function checkExistingSession() {
     const sessionId = localStorage.getItem('sessionId');
     if (!sessionId) return;
-    
     try {
         const response = await fetch(`${API_BASE_URL}/auth/validate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId }),
         });
-        
         const result = await response.json();
-        
         if (result.success && result.data.valid) {
             showSuccessScreen(result.data);
         } else {
             localStorage.removeItem('sessionId');
         }
-    } catch (error) {
-        console.error('Session check error:', error);
+    } catch (err) {
+        console.error('Session check error:', err);
     }
 }
 
 // Close Portal and Start Browsing
 function closePortal() {
-    // Try to close the window or redirect
-    window.close();
-    
-    // If window.close() doesn't work (most browsers block it), redirect to a success page
-    setTimeout(() => {
-        window.location.href = 'about:blank';
-    }, 500);
+  window.close();
+  setTimeout(() => { window.location.href = 'about:blank'; }, 500);
 }
 
 // Utility Functions
 function formatPhoneNumber(phone) {
-    phone = phone.replace(/\s/g, '');
-    if (phone.startsWith('0')) {
-        return '254' + phone.substring(1);
-    }
-    if (!phone.startsWith('254')) {
-        return '254' + phone;
-    }
-    return phone;
+  phone = phone.replace(/\s/g, '');
+  if (phone.startsWith('0')) return '254' + phone.substring(1);
+  if (!phone.startsWith('254')) return '254' + phone;
+  return phone;
 }
 
 function formatTime(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const days = Math.floor(hours / 24);
-    
     if (days > 0) {
         const remainingHours = hours % 24;
         return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days > 1 ? 's' : ''}`;
@@ -333,6 +352,157 @@ function formatTime(seconds) {
         return minutes > 0 ? `${hours}h ${minutes}m` : `${hours} hr${hours > 1 ? 's' : ''}`;
     } else {
         return `${minutes} min`;
+    }
+}
+
+function updateProcessingStep(activeIndex) {
+    const steps = document.querySelectorAll('.processing-steps .step');
+    steps.forEach((step, idx) => {
+        if (idx <= activeIndex) {
+            step.classList.add('active');
+        } else {
+            step.classList.remove('active');
+        }
+    });
+}
+
+function setButtonLoading(btn, loadingText) {
+    if (!btn || btn.classList.contains('loading')) return;
+    btn.classList.add('loading');
+    btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
+    const labelSpan = btn.querySelector('.btn-label');
+    if (labelSpan) {
+        labelSpan.dataset.original = labelSpan.textContent;
+        labelSpan.textContent = loadingText;
+    }
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner-inline';
+    spinner.setAttribute('aria-hidden', 'true');
+    btn.insertBefore(spinner, btn.firstChild);
+}
+
+function clearButtonLoading(btn) {
+    if (!btn) return;
+    btn.classList.remove('loading');
+    btn.setAttribute('aria-busy', 'false');
+    btn.disabled = false;
+    const labelSpan = btn.querySelector('.btn-label');
+    const spinner = btn.querySelector('.spinner-inline');
+    if (spinner) spinner.remove();
+    if (labelSpan && labelSpan.dataset.original) {
+        labelSpan.textContent = labelSpan.dataset.original;
+    }
+}
+
+// Manual query fallback to /payment/query
+async function manualQueryPayment() {
+    manualQueryPerformed = true;
+    try {
+        const response = await fetch(`${API_BASE_URL}/payment/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                checkoutRequestID: currentTransaction.checkoutRequestID,
+                transactionId: currentTransaction.transactionId
+            })
+        });
+        const result = await response.json();
+        if (!result.success) return;
+        const status = result.data.status;
+        if (status === 'completed') {
+            updateProcessingStep(2);
+            stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
+            await fetchAndShowSuccess();
+        } else if (status === 'cancelled') {
+            stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
+            showToast('Payment cancelled.', 'warning');
+            showScreen('packagesScreen');
+        } else if (status === 'failed') {
+            stopPaymentStatusCheck();
+            clearButtonLoading(document.getElementById('payButton'));
+            showToast('Payment failed. Please try again.', 'error');
+            showScreen('packagesScreen');
+        }
+    } catch (err) {
+        console.error('Manual query error:', err);
+    }
+}
+
+// Fetch session details (if created) then show success screen
+async function fetchAndShowSuccess() {
+    try {
+        let sessionData = null;
+        const sessionId = localStorage.getItem('sessionId');
+        if (sessionId) {
+            const resp = await fetch(`${API_BASE_URL}/auth/validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId })
+            });
+            const validateResult = await resp.json();
+            if (validateResult.success && validateResult.data.valid) {
+                sessionData = validateResult.data;
+            }
+        }
+        // If we still don't have a session object, query by MAC address (device-specific)
+        if (!sessionData) {
+            const deviceInfo = getDeviceInfo();
+            const statusResp = await fetch(`${API_BASE_URL}/auth/status?macAddress=${encodeURIComponent(deviceInfo.macAddress)}`);
+            const statusResult = await statusResp.json();
+            if (statusResult.success && statusResult.data.activeSessions > 0) {
+                const active = statusResult.data.sessions[0];
+                localStorage.setItem('sessionId', active.sessionId);
+                // Re-run validate to get consistent payload
+                const validateResp = await fetch(`${API_BASE_URL}/auth/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: active.sessionId })
+                });
+                const validateData = await validateResp.json();
+                if (validateData.success && validateData.data.valid) {
+                    sessionData = validateData.data;
+                } else {
+                    // Fallback synthetic sessionData
+                    sessionData = {
+                        packageName: active.packageName,
+                        bandwidthMbps: active.bandwidthMbps || selectedPackage?.bandwidthMbps || 0,
+                        timeRemaining: active.timeRemaining,
+                    };
+                }
+            }
+        }
+        if (!sessionData) {
+            // short delay and second attempt in case session just created
+            await new Promise(r => setTimeout(r, 800));
+            const retrySessionId = localStorage.getItem('sessionId');
+            if (retrySessionId) {
+                const resp2 = await fetch(`${API_BASE_URL}/auth/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: retrySessionId })
+                });
+                const validateResult2 = await resp2.json();
+                if (validateResult2.success && validateResult2.data.valid) {
+                    sessionData = validateResult2.data;
+                }
+            }
+        }
+        const displayData = {
+            packageName: sessionData?.packageName || selectedPackage?.name || 'Package',
+            bandwidthMbps: sessionData?.bandwidthMbps || selectedPackage?.bandwidthMbps || 0,
+            timeRemaining: sessionData?.timeRemaining || (selectedPackage?.durationHours ? selectedPackage.durationHours * 3600 : 0)
+        };
+        showSuccessScreen(displayData);
+    } catch (err) {
+        console.error('Fetch session details error:', err);
+        showSuccessScreen({
+            packageName: selectedPackage?.name || 'Package',
+            bandwidthMbps: selectedPackage?.bandwidthMbps || 0,
+            timeRemaining: selectedPackage?.durationHours ? selectedPackage.durationHours * 3600 : 0
+        });
     }
 }
 

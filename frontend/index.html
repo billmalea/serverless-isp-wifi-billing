@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WiFi Hotspot - Welcome</title>
+        <title>WiFi Hotspot - Welcome</title>
+        <meta name="theme-color" content="#0A7B83">
     <link rel="stylesheet" href="styles.css">
     <script src="config.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                    <circle cx="20" cy="20" r="18" stroke="#4F46E5" stroke-width="4"/>
-                    <path d="M15 20 L18 23 L26 15" stroke="#4F46E5" stroke-width="3" stroke-linecap="round"/>
+                <svg width="44" height="44" viewBox="0 0 40 40" fill="none" class="logo-icon">
+                    <circle cx="20" cy="20" r="18" stroke="currentColor" stroke-width="4"/>
+                    <path d="M15 20 L18 23 L26 15" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
                 </svg>
                 <h1>WiFi Access</h1>
             </div>
@@ -65,7 +66,7 @@
             </div>
 
             <!-- Packages Screen -->
-            <div id="packagesScreen" class="screen">
+            <div id="packagesScreen" class="screen screen-wide">
                 <button class="back-btn" onclick="showScreen('welcomeScreen')">← Back</button>
                 
                 <h2>Choose Your Package</h2>
@@ -82,8 +83,8 @@
                         <input type="tel" id="phoneNumber" placeholder="0712345678" required>
                         <small>Enter your Safaricom number</small>
                     </div>
-                    <button class="btn btn-primary" onclick="initiatePayment()">
-                        Pay with M-Pesa
+                    <button class="btn btn-primary" id="payButton" onclick="initiatePayment()" aria-busy="false" aria-live="polite">
+                        <span class="btn-label">Pay with M-Pesa</span>
                     </button>
                 </div>
             </div>
@@ -136,7 +137,7 @@
             <!-- Payment Processing Screen -->
             <div id="processingScreen" class="screen">
                 <div class="processing-content">
-                    <div class="spinner"></div>
+                        <div class="spinner" aria-label="Loading" role="status"></div>
                     <h2>Processing Payment...</h2>
                     <p>Please check your phone for the M-Pesa prompt</p>
                     <p class="processing-phone" id="processingPhone"></p>
@@ -163,9 +164,9 @@
             </div>
 
             <!-- Success Screen -->
-            <div id="successScreen" class="screen">
+            <div id="successScreen" class="screen screen-wide">
                 <div class="success-content">
-                    <div class="success-icon">✓</div>
+                        <div class="success-icon" aria-hidden="true">✓</div>
                     <h2>You're Connected!</h2>
                     <p>Your internet access is now active</p>
 
