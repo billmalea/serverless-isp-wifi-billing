@@ -107,6 +107,22 @@ npm run sam:build
 sam deploy --config-env dev
 ```
 
+### Payment Reliability Enhancements (No Extra Poller Lambda)
+
+The stack now includes inline payment confirmation logic and a manual fallback endpoint—no separate poller function is required.
+
+| Feature | Implementation |
+|---------|----------------|
+| Inline Safety Polling | 2 STK Query attempts right after `/payment/initiate` |
+| Manual Fallback | `POST /payment/query` with `checkoutRequestID` (and optional `transactionId`) |
+| Cancellation Persistence | ResultCode `1032` recorded as status `cancelled` |
+| Expiration Handling | ResultCode `1037` recorded as status `expired` |
+| Session Extension | Successful payment extends active device session instead of creating duplicate |
+| OAuth Token Caching | Reuses token until <60s remaining, reduces rate-limit risk |
+
+No extra deployment steps are needed—logic resides within `PaymentFunction`.
+```
+
 ### Environment-Specific Deployments
 
 **Development:**
@@ -154,6 +170,17 @@ sam local invoke AuthFunction --event events/auth-event.json
 
 # Invoke PaymentFunction
 sam local invoke PaymentFunction --event events/payment-event.json
+```
+
+### Manual STK Query Test
+
+Simulate delayed callback by invoking the query endpoint locally (adjust event JSON accordingly):
+
+```bash
+curl -X POST http://127.0.0.1:3000/payment/query \
+  -H "Content-Type: application/json" \
+  -d '{"checkoutRequestID":"ws_CO_17112025120000123456789","transactionId":"txn_test"}'
+```
 ```
 
 ### Test with Local DynamoDB

@@ -42,6 +42,29 @@ Safaricom sends callback to our system
 System activates internet access
 ```
 
+### Extended Flow (Reliability Enhancements)
+
+```
+Initiate STK Push
+   ↓
+Inline safety polling (up to 2 STK Query attempts ~3s apart)
+   ↓
+If early success → synthesize callback & finalize session
+Else remain pending
+   ↓
+Await official Safaricom callback
+   ↓         ↘
+Callback arrives  Manual `/payment/query` fallback (if delayed)
+   ↓
+Create OR extend time-based session (device MAC binding)
+```
+
+Key improvements:
+- Reduced latency for successful payments (early confirmation path)
+- Graceful handling of user cancellation (ResultCode `1032` → status `cancelled`)
+- Manual recovery for delayed callbacks via `/payment/query` endpoint
+- In-memory OAuth token caching reduces rate-limit and spike arrest errors
+
 ---
 
 ## Daraja API Setup
@@ -135,6 +158,9 @@ async function getMpesaToken(): Promise<string> {
 
   return response.data.access_token;
 }
+
+// Production implementation caches token until close to expiry (<60s remaining)
+// to minimize OAuth calls and avoid rate limiting.
 ```
 
 ### Generate Password
@@ -388,6 +414,9 @@ export async function handleMpesaCallback(event: APIGatewayEvent): Promise<APIGa
 3. **Timeout**: Callback must respond within 30 seconds
 4. **IP Whitelist**: Only accept callbacks from Safaricom IPs
 5. **Async Processing**: Use SQS queue for heavy processing
+6. **Inline Polling**: Perform limited STK Query attempts immediately after initiation to catch fast successes or cancellations.
+7. **Manual Query Fallback**: Provide `/payment/query` endpoint (requires `checkoutRequestID`) to finalize pending transactions if callback is delayed.
+8. **Cancellation Persistence**: ResultCode `1032` stored as `cancelled` (distinct from `failed`).
 
 ---
 
@@ -561,6 +590,8 @@ async function getMpesaToken(): Promise<string> {
 
   return token;
 }
+
+// Tip: Always leave ~60 seconds buffer before expiry when deciding to reuse token.
 ```
 
 #### 2. "Bad Request - Invalid PhoneNumber"
@@ -601,6 +632,24 @@ if (resultCode === 1037) {
     errorMessage: 'User did not complete payment'
   });
 }
+
+#### 6. "Transaction Still Pending"
+
+**Cause**: Callback delayed or lost.
+
+**Solution**:
+1. Call `/payment/query` with the original `checkoutRequestID` and `transactionId`.
+2. If `resultCode` returns `0`, system synthesizes callback and finalizes session.
+3. If still pending, wait for callback or retry once after several seconds.
+4. Log prolonged pending (>2 minutes) for investigation.
+
+```json
+POST /api/payment/query
+{
+  "checkoutRequestID": "ws_CO_17112025120000123456789",
+  "transactionId": "txn_1763416039818_zjrnyzg53x"
+}
+```
 ```
 
 #### 4. "Callback Not Received"

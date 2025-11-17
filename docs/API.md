@@ -29,9 +29,7 @@ Token is obtained after successful login or voucher redemption.
 
 ---
 
-## Endpoints
-
-### 🔐 Authentication
+### Endpoints
 
 #### `POST /api/auth/login`
 
@@ -67,13 +65,7 @@ Authenticate user with phone number and password.
 {
   "success": false,
   "error": "Invalid credentials"
-}
-
-// 404 Not Found
-{
-  "success": false,
   "error": "User not found"
-}
 ```
 
 ---

@@ -100,6 +100,12 @@ async function publishMetric(metricName: string, value: number, unit: string = '
 await publishMetric('PaymentSuccess', 1);
 await publishMetric('DataUsage', bytesUsed, 'Bytes');
 await publishMetric('SessionDuration', seconds, 'Seconds');
+// New recommended metrics
+await publishMetric('PaymentCancelled', 1);          // ResultCode 1032 occurrences
+await publishMetric('PaymentExpired', 1);            // ResultCode 1037 occurrences
+await publishMetric('PendingQueryFallback', 1);      // /payment/query used to finalize
+await publishMetric('OAuthTokenReuseHit', 1);        // Cached token used (hit rate assessment)
+await publishMetric('SessionExtended', 1);           // Existing session extended instead of new
 ```
 
 ---
@@ -158,6 +164,10 @@ await publishMetric('ActiveSessions', activeSessions);
 - Average transaction value
 - Failed payments by error code
 - M-Pesa response time
+- Cancellation rate (ResultCode 1032)
+- Expiration rate (ResultCode 1037)
+- Manual query fallback count
+- Average pending duration (time from initiate to completion)
 
 ```typescript
 // Payment outcome
@@ -246,6 +256,26 @@ HighLatencyAlarm:
 ```
 
 #### 4. **DynamoDB Throttling**
+#### 5. **High Pending Queue Duration**
+
+Alarm on excessive pending transactions (e.g., >20 pending older than 120s):
+
+```yaml
+HighPendingTransactionsAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: WiFiBilling-HighPendingTransactions
+    MetricName: PendingQueryFallback
+    Namespace: WiFiBilling
+    Statistic: Sum
+    Period: 300
+    EvaluationPeriods: 1
+    Threshold: 20
+    ComparisonOperator: GreaterThanThreshold
+    AlarmActions:
+      - !Ref CriticalAlertTopic
+    AlarmDescription: Too many manual fallback queries indicating delayed callbacks
+```
 
 ```yaml
 DynamoDBThrottleAlarm:
@@ -389,6 +419,8 @@ Review CloudWatch dashboard for:
 - Revenue today
 - Error rates
 - API latency
+- Pending transaction count trend
+- Cancellation & expiration counts
 
 #### 2. **Review Alarms**
 
@@ -425,6 +457,9 @@ aws dynamodb describe-limits
 ```
 
 #### 3. **Backup Verification**
+#### 4. **Callback Health Review**
+
+Analyze ratio: manual fallback queries vs successful callbacks. High ratio may indicate external latency.
 
 Verify DynamoDB backups exist:
 
@@ -487,7 +522,7 @@ aws ce get-cost-and-usage \
 2. Check AWS Service Health Dashboard
 3. Review recent deployments
 4. Scale Lambda concurrency if needed
-5. Enable enhanced monitoring
+5. Enable enhanced monitoring (focus on pending, cancellation spikes)
 6. Post status update to users
 
 #### Level 3: Critical Outage
@@ -501,7 +536,7 @@ aws ce get-cost-and-usage \
 3. Check AWS service status
 4. Failover to backup region (if configured)
 5. Communicate to all users via SMS/email
-6. Document timeline for post-mortem
+6. Document timeline for post-mortem (include pending vs callback metrics)
 
 ### Rollback Procedure
 

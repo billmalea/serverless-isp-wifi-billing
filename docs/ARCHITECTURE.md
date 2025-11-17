@@ -133,9 +133,12 @@ Each Lambda function has a single responsibility:
 - **Triggers**: API Gateway, SQS
 - **Functions**:
   - M-Pesa STK Push initiation
-  - Payment callback processing
-  - Transaction status queries
-  - Daraja API token management
+  - Inline safety polling (2 STK Query attempts post-initiate)
+  - Manual STK query endpoint (`/payment/query`) for delayed callbacks
+  - Payment callback processing (webhook + queued SQS processor)
+  - Transaction status queries (`/payment/status` via query param)
+  - Session creation OR extension (extends existing device session duration & bandwidth)
+  - Daraja API OAuth token caching (reuse until <60s to expiry)
 
 #### CoA_Lambda
 - **Runtime**: Node.js 18.x
@@ -399,13 +402,17 @@ Check device (MAC address) - no active session?
     ↓
 Fetch package details from PackagesTable
     ↓
-Generate access token from Daraja API
+Generate (or reuse cached) access token from Daraja API
     ↓
 Initiate STK Push to user's phone
+  ↓
+Inline safety polling (up to 2 quick STK Query attempts ~3s apart)
     ↓
 User enters M-Pesa PIN
     ↓
-M-Pesa webhook → API Gateway → PaymentLambda
+M-Pesa webhook → API Gateway → PaymentLambda (callback processed; queue provides decoupling)
+  ↓
+Optional manual fallback: `/payment/query` if callback delayed (synthesizes callback on success)
     ↓
 Enqueue to SQS PaymentCallbackQueue
     ↓

@@ -84,38 +84,50 @@ For detailed architecture documentation, see **[Architecture Guide](docs/ARCHITE
 git clone <repository-url>
 cd serverless-wifi-billing
 ```
-
-### 2. Install Dependencies
-
-```bash
+3. **Payment** → STK Push initiated → Inline safety polling (2 quick STK queries) → Pending or early success
+4. **Callback / Fallback** → M-Pesa webhook OR manual `/payment/query` (if delayed) → PaymentLambda finalizes
+5. **Authorization** → Create OR extend session → CoA_Lambda updates gateway bandwidth/access
+6. **Session Tracking** → Time-based session auto-expires (DynamoDB TTL)
 # Install all dependencies
 npm install
 ```
 
-### 3. Configure Environment
-
-```bash
-cp config/example.env .env
+### Payment (Public)
+- `POST /payment/initiate` - Start M-Pesa STK Push (with inline safety polling)
+- `POST /payment/callback` - M-Pesa webhook (internal)
+- `GET /payment/status?transactionId=` - Check payment status
+- `POST /payment/query` - Manual STK query fallback (finalize pending)
+- `GET /payment/packages` - List active packages
 ```
 
-Edit `.env` with your credentials:
-
-```env
-# M-Pesa Daraja API
-MPESA_CONSUMER_KEY=your_consumer_key
-MPESA_CONSUMER_SECRET=your_consumer_secret
+### TransactionsTable
+- `transactionId` (PK) - Internal transaction ID
+- `userId` - Reference to user
+- `amount` - Payment amount (KES)
+- `phoneNumber` - M-Pesa number
+- `packageId` / `packageName` - Purchased package
+- `status` - pending/completed/failed/cancelled/expired
+- `mpesaTransactionId` / `checkoutRequestID` - STK identifiers
+- `mpesaReceiptNumber` - Receipt (blank in sandbox until callback)
+- `timestamp` - Initiation time
+- `completedAt` - Finalization time
+- `cancellationReason` / `cancelledAt` - Present when user cancels (ResultCode 1032)
 MPESA_SHORTCODE=174379
 MPESA_PASSKEY=your_passkey
-MPESA_CALLBACK_URL=https://api.yourdomain.com/payment/callback
-
-# AWS Region
-AWS_REGION=us-east-1
+### Payment Metrics
+- Payment success rate
+- Cancellation rate (ResultCode 1032)
+- Expiration rate (ResultCode 1037)
+- Average transaction value
+- Failed payments by error code
+- Callback latency (initiate → completedAt)
+- Manual query fallback count
 
 # System Configuration
 SYSTEM_NAME=MyHotspot
 ADMIN_EMAIL=admin@example.com
 ```
-
+**Built with ❤️ for the Kenyan WiFi market — now with resilient payment confirmation (inline polling + manual query fallback).**
 ### 4. Deploy Infrastructure
 
 ```bash
@@ -417,4 +429,4 @@ Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
-**Built with ❤️ for the Kenyan WiFi market**
+**Built with ❤️ for the Kenya**

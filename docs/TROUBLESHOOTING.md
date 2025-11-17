@@ -229,6 +229,7 @@ aws logs filter-pattern "ResultCode" \
 # 2001 = Wrong PIN - user to try again
 # 1032 = Cancelled - user declined payment
 # 1037 = Timeout - user didn't enter PIN
+# (Use /payment/status?transactionId=... or POST /payment/query for manual fallback)
 ```
 
 ---
@@ -239,6 +240,7 @@ aws logs filter-pattern "ResultCode" \
 - Payment deducted from M-Pesa
 - No internet access granted
 - Transaction stuck in "pending"
+- User session not created or extended
 
 **Diagnosis:**
 
@@ -314,6 +316,33 @@ If payment deducted but service not provided:
 
 ```typescript
 // scripts/manual-refund.ts
+
+### Pending Transaction Remains Pending (>60s)
+
+**Symptoms:**
+- Transaction stays `pending` well after user approves payment
+- Callback log absent
+- User confirms debit SMS
+
+**Actions:**
+1. Identify `checkoutRequestID` from initiation response or logs.
+2. Invoke manual query:
+```bash
+curl -X POST https://api.yourdomain.com/payment/query \
+  -H "Content-Type: application/json" \
+  -d '{"checkoutRequestID":"ws_CO_17112025120000123456789","transactionId":"txn_123"}'
+```
+3. Interpret `resultCode`:
+   - `0` → System synthesizes callback; transaction becomes `completed`.
+   - `1032` → User cancelled; mark `cancelled`.
+   - `1037` → Timeout; mark `expired`.
+   - Other / still pending → Wait for callback, optionally retry once.
+
+**Escalate** if pending >2 minutes and manual query still pending: log anomaly, monitor callback latency metrics.
+
+**Metrics to Watch:** `PendingQueryFallback`, `PaymentCancelled`, `PaymentExpired`, `OAuthTokenReuseHit` for token efficiency.
+
+---
 async function processRefund(transactionId: string) {
   // 1. Update transaction status
   await dynamodb.update({
