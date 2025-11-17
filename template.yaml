@@ -1,0 +1,585 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless WiFi Billing System for Kenya with M-Pesa Integration
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 30
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        NODE_ENV: !Ref Environment
+        AWS_REGION: !Ref AWS::Region
+        USERS_TABLE: !Ref UsersTable
+        SESSIONS_TABLE: !Ref SessionsTable
+        TRANSACTIONS_TABLE: !Ref TransactionsTable
+        VOUCHERS_TABLE: !Ref VouchersTable
+        PACKAGES_TABLE: !Ref PackagesTable
+        GATEWAYS_TABLE: !Ref GatewaysTable
+        COA_QUEUE_URL: !Ref CoAQueue
+        PAYMENT_CALLBACK_QUEUE_URL: !Ref PaymentCallbackQueue
+        MPESA_ENVIRONMENT: !Ref MPesaEnvironment
+        MPESA_CONSUMER_KEY: !Ref MPesaConsumerKey
+        MPESA_CONSUMER_SECRET: !Ref MPesaConsumerSecret
+        MPESA_SHORTCODE: !Ref MPesaShortcode
+        MPESA_PASSKEY: !Ref MPesaPasskey
+        MPESA_CALLBACK_URL: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/payment/callback'
+        JWT_SECRET: !Ref JWTSecret
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+  
+  MPesaEnvironment:
+    Type: String
+    Default: sandbox
+    AllowedValues:
+      - sandbox
+      - production
+    Description: M-Pesa API environment
+  
+  MPesaConsumerKey:
+    Type: String
+    NoEcho: true
+    Description: M-Pesa Daraja API Consumer Key
+  
+  MPesaConsumerSecret:
+    Type: String
+    NoEcho: true
+    Description: M-Pesa Daraja API Consumer Secret
+  
+  MPesaShortcode:
+    Type: String
+    Default: '174379'
+    Description: M-Pesa Paybill/Till Number
+  
+  MPesaPasskey:
+    Type: String
+    NoEcho: true
+    Description: M-Pesa Lipa Na M-Pesa Passkey
+  
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT Secret for token generation
+
+Resources:
+  # API Gateway
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'WiFiBilling-API-${Environment}'
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        ApiKeyRequired: false
+      TracingEnabled: true
+      MethodSettings:
+        - HttpMethod: '*'
+          ResourcePath: '/*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+
+  # Lambda Functions
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-Auth-${Environment}'
+      CodeUri: lambda/auth/
+      Handler: index.handler
+      Description: Handles user authentication, login, and voucher redemption
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VouchersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PackagesTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt CoAQueue.QueueName
+        - CloudWatchPutMetricPolicy: {}
+      Events:
+        Login:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/login
+            Method: POST
+        Voucher:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/voucher
+            Method: POST
+        Validate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/validate
+            Method: POST
+        Status:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/status
+            Method: GET
+        Logout:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/logout
+            Method: POST
+
+  PaymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-Payment-${Environment}'
+      CodeUri: lambda/payment/
+      Handler: index.handler
+      Description: Handles M-Pesa payment initiation and callbacks
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PackagesTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt CoAQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt PaymentCallbackQueue.QueueName
+        - CloudWatchPutMetricPolicy: {}
+      Events:
+        InitiatePayment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /payment/initiate
+            Method: POST
+        PaymentCallback:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /payment/callback
+            Method: POST
+        PaymentStatus:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /payment/status
+            Method: GET
+        GetPackages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /payment/packages
+            Method: GET
+
+  CoAFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-CoA-${Environment}'
+      CodeUri: lambda/coa/
+      Handler: index.handler
+      Description: Processes Change of Authorization messages to gateways
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GatewaysTable
+      Events:
+        CoAQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CoAQueue.Arn
+            BatchSize: 10
+
+  PaymentCallbackProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-PaymentCallback-${Environment}'
+      CodeUri: lambda/payment/
+      Handler: index.handler
+      Description: Processes M-Pesa payment callbacks from queue
+      Timeout: 60
+      Environment:
+        Variables:
+          PROCESS_CALLBACK: 'true'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PackagesTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt CoAQueue.QueueName
+      Events:
+        PaymentQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt PaymentCallbackQueue.Arn
+            BatchSize: 5
+
+  PackageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-Package-${Environment}'
+      CodeUri: lambda/package/
+      Handler: index.handler
+      Description: Manages time-based billing packages (CRUD operations)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PackagesTable
+      Events:
+        ListPackages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/packages
+            Method: GET
+        AdminListPackages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/admin/packages
+            Method: GET
+        CreatePackage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/admin/packages
+            Method: POST
+        UpdatePackage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/admin/packages/{id}
+            Method: PUT
+        DeletePackage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/admin/packages/{id}
+            Method: DELETE
+
+  SessionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-Session-${Environment}'
+      CodeUri: lambda/session/
+      Handler: index.handler
+      Description: Manages active sessions (list, terminate, query)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+        - CloudWatchPutMetricPolicy: {}
+      Events:
+        ListSessions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/sessions
+            Method: GET
+        TerminateSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /api/sessions/terminate
+            Method: POST
+
+  # DynamoDB Tables
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Users-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: phoneNumber
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: phoneNumber
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Sessions-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: macAddress
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: MacAddressIndex
+          KeySchema:
+            - AttributeName: macAddress
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  TransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Transactions-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: transactionId
+          AttributeType: S
+        - AttributeName: phoneNumber
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: transactionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: PhoneNumberIndex
+          KeySchema:
+            - AttributeName: phoneNumber
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  VouchersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Vouchers-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: voucherCode
+          AttributeType: S
+      KeySchema:
+        - AttributeName: voucherCode
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  PackagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Packages-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: packageId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: priceKES
+          AttributeType: N
+      KeySchema:
+        - AttributeName: packageId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusPriceIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: priceKES
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  GatewaysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'WiFiBilling-Gateways-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: gatewayId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: gatewayId
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # SQS Queues
+  CoAQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'WiFiBilling-CoA-${Environment}'
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CoADLQ.Arn
+        maxReceiveCount: 3
+
+  CoADLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'WiFiBilling-CoA-DLQ-${Environment}'
+      MessageRetentionPeriod: 1209600
+
+  PaymentCallbackQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'WiFiBilling-PaymentCallback-${Environment}'
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PaymentCallbackDLQ.Arn
+        maxReceiveCount: 3
+
+  PaymentCallbackDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'WiFiBilling-PaymentCallback-DLQ-${Environment}'
+      MessageRetentionPeriod: 1209600
+
+  # S3 Bucket for Portal Assets
+  PortalAssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'wifi-billing-portal-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+
+  PortalBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PortalAssetsBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${PortalAssetsBucket.Arn}/*'
+
+  # CloudWatch Log Groups
+  AuthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AuthFunction}'
+      RetentionInDays: 14
+
+  PaymentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${PaymentFunction}'
+      RetentionInDays: 14
+
+  CoALogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${CoAFunction}'
+      RetentionInDays: 14
+
+Outputs:
+  ApiGatewayUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  PortalBucketUrl:
+    Description: S3 Portal Assets Bucket URL
+    Value: !GetAtt PortalAssetsBucket.WebsiteURL
+    Export:
+      Name: !Sub '${AWS::StackName}-PortalUrl'
+
+  PortalBucketName:
+    Description: S3 Portal Assets Bucket Name
+    Value: !Ref PortalAssetsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PortalBucket'
+
+  UsersTableName:
+    Description: DynamoDB Users Table Name
+    Value: !Ref UsersTable
+
+  SessionsTableName:
+    Description: DynamoDB Sessions Table Name
+    Value: !Ref SessionsTable
+
+  TransactionsTableName:
+    Description: DynamoDB Transactions Table Name
+    Value: !Ref TransactionsTable
+
+  VouchersTableName:
+    Description: DynamoDB Vouchers Table Name
+    Value: !Ref VouchersTable
+
+  CoAQueueUrl:
+    Description: SQS CoA Queue URL
+    Value: !Ref CoAQueue

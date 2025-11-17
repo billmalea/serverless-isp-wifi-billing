@@ -1,0 +1,86 @@
+{
+  "_notice": "DEPRECATED: This file is no longer used. Packages are now managed in DynamoDB PackagesTable.",
+  "_migration": "Run 'npm run seed-packages' to create initial time-based packages in database.",
+  "_new_model": "Time-based billing: Users purchase time (hours) with bandwidth allocation, not data limits.",
+  "legacy_packages_for_reference": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "dataMB": 500,
+      "timeSeconds": 86400,
+      "priceKES": 20,
+      "bandwidthUp": "2M",
+      "bandwidthDown": "2M",
+      "description": "500MB valid for 24 hours",
+      "validityDays": 1,
+      "active": true,
+      "_converted_to": "Quick Access: 1 hour @ 2 Mbps - KES 15"
+    },
+    {
+      "id": "standard",
+      "name": "Standard",
+      "dataMB": 1024,
+      "timeSeconds": 86400,
+      "priceKES": 50,
+      "bandwidthUp": "5M",
+      "bandwidthDown": "5M",
+      "description": "1GB valid for 24 hours",
+      "validityDays": 1,
+      "active": true
+    },
+    {
+      "id": "premium",
+      "name": "Premium",
+      "dataMB": 3072,
+      "timeSeconds": 172800,
+      "priceKES": 100,
+      "bandwidthUp": "10M",
+      "bandwidthDown": "10M",
+      "description": "3GB valid for 48 hours",
+      "validityDays": 2,
+      "active": true
+    },
+    {
+      "id": "ultra",
+      "name": "Ultra",
+      "dataMB": 10240,
+      "timeSeconds": 604800,
+      "priceKES": 300,
+      "bandwidthUp": "20M",
+      "bandwidthDown": "20M",
+      "description": "10GB valid for 7 days",
+      "validityDays": 7,
+      "active": true
+    },
+    {
+      "id": "daily",
+      "name": "Daily Lite",
+      "dataMB": 200,
+      "timeSeconds": 43200,
+      "priceKES": 10,
+      "bandwidthUp": "1M",
+      "bandwidthDown": "1M",
+      "description": "200MB valid for 12 hours",
+      "validityDays": 1,
+      "active": true
+    },
+    {
+      "id": "weekly",
+      "name": "Weekly Plus",
+      "dataMB": 5120,
+      "timeSeconds": 604800,
+      "priceKES": 200,
+      "bandwidthUp": "15M",
+      "bandwidthDown": "15M",
+      "description": "5GB valid for 7 days",
+      "validityDays": 7,
+      "active": true
+    }
+  ],
+  "metadata": {
+    "currency": "KES",
+    "country": "Kenya",
+    "taxRate": 0.16,
+    "lastUpdated": "2025-11-17"
+  }
+}

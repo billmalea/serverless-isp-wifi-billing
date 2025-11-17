@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Hotspot - Welcome</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                    <circle cx="20" cy="20" r="18" stroke="#4F46E5" stroke-width="4"/>
+                    <path d="M15 20 L18 23 L26 15" stroke="#4F46E5" stroke-width="3" stroke-linecap="round"/>
+                </svg>
+                <h1>WiFi Access</h1>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-dot"></span>
+                <span>Not Connected</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Welcome Screen -->
+            <div id="welcomeScreen" class="screen active">
+                <div class="welcome-hero">
+                    <h2>Welcome to Free WiFi! 🌐</h2>
+                    <p>Get connected in seconds with our affordable data packages</p>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="showScreen('packagesScreen')">
+                        Buy Data Package
+                    </button>
+                    <button class="btn btn-secondary" onclick="showScreen('voucherScreen')">
+                        Use Voucher Code
+                    </button>
+                    <button class="btn btn-text" onclick="showScreen('loginScreen')">
+                        Already have account? Login
+                    </button>
+                </div>
+
+                <div class="features">
+                    <div class="feature">
+                        <span class="feature-icon">⚡</span>
+                        <span>Fast & Reliable</span>
+                    </div>
+                    <div class="feature">
+                        <span class="feature-icon">💳</span>
+                        <span>Pay with M-Pesa</span>
+                    </div>
+                    <div class="feature">
+                        <span class="feature-icon">🔒</span>
+                        <span>Secure Connection</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Packages Screen -->
+            <div id="packagesScreen" class="screen">
+                <button class="back-btn" onclick="showScreen('welcomeScreen')">← Back</button>
+                
+                <h2>Choose Your Package</h2>
+                <p class="subtitle">Select a data package that fits your needs</p>
+
+                <div class="packages-grid" id="packagesGrid">
+                    <!-- Packages loaded dynamically -->
+                </div>
+
+                <div class="payment-form" id="paymentForm" style="display: none;">
+                    <h3>Complete Your Purchase</h3>
+                    <div class="form-group">
+                        <label for="phoneNumber">M-Pesa Phone Number</label>
+                        <input type="tel" id="phoneNumber" placeholder="0712345678" required>
+                        <small>Enter your Safaricom number</small>
+                    </div>
+                    <button class="btn btn-primary" onclick="initiatePayment()">
+                        Pay with M-Pesa
+                    </button>
+                </div>
+            </div>
+
+            <!-- Voucher Screen -->
+            <div id="voucherScreen" class="screen">
+                <button class="back-btn" onclick="showScreen('welcomeScreen')">← Back</button>
+                
+                <h2>Enter Voucher Code</h2>
+                <p class="subtitle">Have a voucher? Enter the code below</p>
+
+                <div class="voucher-form">
+                    <div class="form-group">
+                        <input type="text" id="voucherCode" placeholder="XXXX-XXXX-XXXX" 
+                               maxlength="14" style="text-transform: uppercase;">
+                    </div>
+                    <button class="btn btn-primary" onclick="redeemVoucher()">
+                        Activate Voucher
+                    </button>
+                </div>
+
+                <div class="info-box">
+                    <p><strong>How to use:</strong></p>
+                    <p>Enter your voucher code and click activate. Your internet access will start immediately.</p>
+                </div>
+            </div>
+
+            <!-- Login Screen -->
+            <div id="loginScreen" class="screen">
+                <button class="back-btn" onclick="showScreen('welcomeScreen')">← Back</button>
+                
+                <h2>Login to Your Account</h2>
+                <p class="subtitle">Access your existing subscription</p>
+
+                <div class="login-form">
+                    <div class="form-group">
+                        <label for="loginPhone">Phone Number</label>
+                        <input type="tel" id="loginPhone" placeholder="0712345678" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password (Optional)</label>
+                        <input type="password" id="loginPassword" placeholder="Enter password">
+                    </div>
+                    <button class="btn btn-primary" onclick="login()">
+                        Login
+                    </button>
+                </div>
+            </div>
+
+            <!-- Payment Processing Screen -->
+            <div id="processingScreen" class="screen">
+                <div class="processing-content">
+                    <div class="spinner"></div>
+                    <h2>Processing Payment...</h2>
+                    <p>Please check your phone for the M-Pesa prompt</p>
+                    <p class="processing-phone" id="processingPhone"></p>
+                    
+                    <div class="processing-steps">
+                        <div class="step active">
+                            <span class="step-number">1</span>
+                            <span>Enter M-Pesa PIN</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span>Confirm Payment</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span>Get Connected</span>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="cancelPayment()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Success Screen -->
+            <div id="successScreen" class="screen">
+                <div class="success-content">
+                    <div class="success-icon">✓</div>
+                    <h2>You're Connected!</h2>
+                    <p>Your internet access is now active</p>
+
+                    <div class="balance-card">
+                        <h3 id="packageInfo">Your Package</h3>
+                        <div class="balance-info">
+                            <div class="balance-item">
+                                <span class="balance-label">Speed</span>
+                                <span class="balance-value" id="dataBalance">0 Mbps</span>
+                            </div>
+                            <div class="balance-item">
+                                <span class="balance-label">Time Remaining</span>
+                                <span class="balance-value" id="timeBalance">0 hrs</span>
+                            </div>
+                        </div>
+                        <p class="unlimited-notice">✨ Unlimited data at allocated speed</p>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="closePortal()">
+                        Start Browsing
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Need help? Contact support: <a href="tel:+254700000000">+254 700 000 000</a></p>
+            <p class="copyright">© 2025 WiFi Hotspot. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
