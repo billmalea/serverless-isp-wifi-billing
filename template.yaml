@@ -26,6 +26,7 @@ Globals:
         MPESA_SHORTCODE: !Ref MPesaShortcode
         MPESA_PASSKEY: !Ref MPesaPasskey
         MPESA_CALLBACK_URL: !Ref MPesaCallbackUrl
+        MPESA_TRANSACTION_TYPE: !Ref MPesaTransactionType
         JWT_SECRET: !Ref JWTSecret
 
 Parameters:
@@ -69,6 +70,19 @@ Parameters:
     Type: String
     Default: ''
     Description: Fully-qualified HTTPS callback URL for M-Pesa (e.g., https://<api-id>.execute-api.<region>.amazonaws.com/<stage>/payment/callback)
+  
+  ApiGatewayBaseUrl:
+    Type: String
+    Description: Base URL of the API Gateway (provide to avoid circular dependency for poller)
+    Default: ''
+  
+  MPesaTransactionType:
+    Type: String
+    Default: CustomerPayBillOnline
+    AllowedValues:
+      - CustomerPayBillOnline
+      - CustomerBuyGoodsOnline
+    Description: STK TransactionType (PayBill vs BuyGoods)
   
   JWTSecret:
     Type: String
@@ -176,6 +190,9 @@ Resources:
       Handler: index.handler
       Description: Handles M-Pesa payment initiation and callbacks
       Timeout: 60
+      Environment:
+        Variables:
+          API_GATEWAY_BASE_URL: !Ref ApiGatewayBaseUrl
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
@@ -209,12 +226,19 @@ Resources:
             RestApiId: !Ref ApiGateway
             Path: /payment/status
             Method: GET
+        PaymentQuery:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /payment/query
+            Method: POST
         GetPackages:
           Type: Api
           Properties:
             RestApiId: !Ref ApiGateway
             Path: /payment/packages
             Method: GET
+
 
   CoAFunction:
     Type: AWS::Serverless::Function
