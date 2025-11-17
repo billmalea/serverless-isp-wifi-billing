@@ -263,7 +263,8 @@ markdownlint docs/**/*.md
 
 - **General Questions**: Open a GitHub issue
 - **Documentation Bugs**: Submit a PR
-- **Support**: support@example.com
+- **Support**: billmalea@gmail.com
+- **WhatsApp**: +254 27800223
 
 ---
 

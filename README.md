@@ -11,12 +11,13 @@ This system provides a complete **plug-and-play** solution for network providers
 ✅ **Serverless Architecture** - No servers to manage, auto-scaling, pay-per-use  
 ✅ **M-Pesa Integration** - Safaricom Daraja API with STK Push  
 ✅ **Multi-Gateway Support** - Works with Mikrotik, UniFi, pfSense, etc.  
-✅ **Real-time Billing** - Track data usage, time limits, and bandwidth  
-✅ **Voucher System** - Generate and validate prepaid vouchers  
+✅ **Time-Based Billing** - Unlimited data with time limits and bandwidth control  
+✅ **JWT Authentication** - Secure user/admin role-based access  
+✅ **Voucher System** - Generate and validate prepaid vouchers with MAC binding  
 ✅ **Admin Dashboard** - Monitor users, transactions, and system health  
-✅ **CloudFront CDN** - Fast captive portal loading globally  
+✅ **CloudWatch Metrics** - Real-time monitoring of payments and sessions  
 ✅ **99.9% Uptime** - Built on AWS managed services  
-✅ **SMS Notifications** - Optional SMS alerts for payments and vouchers  
+✅ **Auto-Expiry** - DynamoDB TTL for automatic session cleanup  
 
 
 ## 🏗️ Architecture
@@ -212,14 +213,16 @@ serverless-wifi-billing/
 
 ## 💰 Pricing Packages
 
-Default packages (customizable in `config/packages.json`):
+Time-based packages with bandwidth limits (unlimited data):
 
-| Package | Data | Time | Price (KES) |
-|---------|------|------|-------------|
-| Basic   | 500MB | 24h | 20 |
-| Standard | 1GB | 24h | 50 |
-| Premium | 3GB | 48h | 100 |
-| Ultra | 10GB | 7 days | 300 |
+| Package | Duration | Bandwidth | Price (KES) |
+|---------|----------|-----------|-------------|
+| Basic   | 1 hour   | 2 Mbps    | 20 |
+| Standard | 3 hours | 5 Mbps    | 50 |
+| Premium | 6 hours | 10 Mbps   | 100 |
+| Ultra | 24 hours | 20 Mbps   | 300 |
+
+Packages are stored in DynamoDB and managed via admin API endpoints.
 
 ## 🔐 Security
 
@@ -233,20 +236,28 @@ Default packages (customizable in `config/packages.json`):
 ## 📊 DynamoDB Tables
 
 ### UsersTable
-- `userId` (PK) - Unique user identifier
-- `phoneNumber` - M-Pesa phone number
-- `balance` - Remaining data/time balance
-- `plan` - Active subscription plan
+- `phoneNumber` (PK) - M-Pesa phone number (primary key)
+- `userId` - Unique UUID identifier
+- `roles` - Array of roles (user/admin)
+- `status` - active/suspended/inactive
 - `createdAt` - Registration timestamp
+- `lastLoginAt` - Last login time
 
 ### SessionsTable
 - `sessionId` (PK) - Unique session identifier
-- `userId` - Reference to user
-- `macAddress` - Device MAC
+- `userId` - UUID reference to user
+- `phoneNumber` - Phone number for convenience
+- `packageId` - Reference to package
+- `packageName` - Package display name
+- `macAddress` - Device MAC (enforces one session per device)
 - `ipAddress` - Assigned IP
+- `gatewayId` - Gateway identifier
 - `startTime` - Session start
-- `dataUsed` - Bytes consumed
+- `expiresAt` - Automatic expiration time
+- `durationHours` - Package duration
+- `bandwidthMbps` - Speed limit
 - `status` - active/expired/terminated
+- `ttl` - DynamoDB TTL for auto-cleanup
 
 ### TransactionsTable
 - `transactionId` (PK) - M-Pesa transaction ID
@@ -258,33 +269,43 @@ Default packages (customizable in `config/packages.json`):
 
 ### VouchersTable
 - `voucherCode` (PK) - Unique voucher code
-- `package` - Associated data package
+- `packageId` - Associated time-based package
 - `status` - unused/used/expired
 - `createdAt` - Generation time
+- `expiresAt` - Optional expiration date
 - `usedAt` - Redemption time
+- `usedBy` - User ID who redeemed
+- `usedByMac` - MAC address of redemption device
+- `batchId` - Batch identifier for bulk generation
+- `ttl` - DynamoDB TTL for auto-expiry
 
 ## 🔌 API Endpoints
 
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/voucher` - Redeem voucher
-- `POST /api/auth/validate` - Validate session
+### Authentication (Public)
+- `POST /auth/login` - User login (returns JWT token)
+- `POST /auth/voucher` - Redeem voucher with MAC binding
+- `POST /auth/validate` - Validate active session
+- `POST /auth/logout` - Terminate session
+- `GET /auth/status` - Check session status
 
-### Payment
-- `POST /api/payment/initiate` - Start M-Pesa payment
-- `POST /api/payment/callback` - M-Pesa webhook
-- `GET /api/payment/status/:id` - Check payment status
+### Payment (Public)
+- `POST /payment/initiate` - Start M-Pesa STK Push
+- `POST /payment/callback` - M-Pesa webhook (internal)
+- `GET /payment/status` - Check payment status
+- `GET /payment/packages` - List active packages
 
-### Session Management
-- `POST /api/session/create` - Create new session
-- `POST /api/session/usage` - Update data usage
-- `DELETE /api/session/terminate` - End session
+### Packages (Public list, Admin CRUD)
+- `GET /api/packages` - List active packages (public)
+- `GET /api/admin/packages` - List all packages (admin only)
+- `POST /api/admin/packages` - Create package (admin only)
+- `PUT /api/admin/packages/{id}` - Update package (admin only)
+- `DELETE /api/admin/packages/{id}` - Delete/deactivate package (admin only)
 
-### Admin (Protected)
-- `GET /api/admin/users` - List all users
-- `GET /api/admin/transactions` - Transaction history
-- `POST /api/admin/voucher/generate` - Create vouchers
-- `GET /api/admin/stats` - System statistics
+### Session Management (Admin Only)
+- `GET /api/sessions` - List all active sessions (admin only)
+- `POST /api/sessions/terminate` - Terminate any session (admin only)
+
+**Note**: Admin endpoints require JWT with `admin` role in Authorization header.
 
 ## 🧪 Testing
 
@@ -310,7 +331,11 @@ npx ts-node scripts/test-mpesa.ts
 
 ### Generate Vouchers
 ```bash
-npm run generate-vouchers -- --count 100 --package standard --export
+# First, get package IDs from DynamoDB
+npm run seed-packages  # Seeds default packages
+
+# Generate vouchers with package ID
+npm run generate-vouchers -- --count 100 --package pkg_<id> --expiry 30 --export
 ```
 
 ### Backup Database
@@ -338,10 +363,22 @@ Extend `lambda/payment/index.ts` to support:
 - Credit Cards (Stripe)
 
 ### Custom Pricing
-Edit `config/packages.json` and redeploy:
+Packages are managed via admin API endpoints:
 ```bash
-npm run build
-sam build && sam deploy
+# Create a new package via API
+curl -X POST https://api.yourdomain.com/api/admin/packages \
+  -H "Authorization: Bearer <admin-jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Custom Package",
+    "description": "Custom time-based package",
+    "durationHours": 12,
+    "bandwidthMbps": 15,
+    "priceKES": 200
+  }'
+
+# Or use the seed script
+npm run seed-packages
 ```
 
 ## 🌍 Kenya-Specific Features
@@ -358,12 +395,14 @@ sam build && sam deploy
 - **API Reference**: [API.md](docs/API.md)
 - **Troubleshooting**: [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - **Issues**: GitHub Issues
-- **Email**: support@example.com
-- **WhatsApp**: +254 XXX XXX XXX
+- **Email**: billmalea@gmail.com
+- **WhatsApp**: +254 27800223
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file
+AGPL-3.0 License - see [LICENSE](LICENSE) file
+
+This project is licensed under the GNU Affero General Public License v3.0. If you modify this software and provide it as a service over a network, you must make the source code available.
 
 ## 🤝 Contributing
 
