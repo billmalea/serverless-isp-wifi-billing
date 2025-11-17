@@ -45,6 +45,9 @@ cdk.context.json
 config/production.json
 config/secrets.json
 
+# Generated frontend config
+frontend/config.js
+
 # IDE
 .vscode/
 .idea/

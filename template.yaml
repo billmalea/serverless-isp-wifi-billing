@@ -12,7 +12,6 @@ Globals:
     Environment:
       Variables:
         NODE_ENV: !Ref Environment
-        AWS_REGION: !Ref AWS::Region
         USERS_TABLE: !Ref UsersTable
         SESSIONS_TABLE: !Ref SessionsTable
         TRANSACTIONS_TABLE: !Ref TransactionsTable
@@ -26,7 +25,7 @@ Globals:
         MPESA_CONSUMER_SECRET: !Ref MPesaConsumerSecret
         MPESA_SHORTCODE: !Ref MPesaShortcode
         MPESA_PASSKEY: !Ref MPesaPasskey
-        MPESA_CALLBACK_URL: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/payment/callback'
+        MPESA_CALLBACK_URL: !Ref MPesaCallbackUrl
         JWT_SECRET: !Ref JWTSecret
 
 Parameters:
@@ -66,6 +65,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: M-Pesa Lipa Na M-Pesa Passkey
+  MPesaCallbackUrl:
+    Type: String
+    Default: ''
+    Description: Fully-qualified HTTPS callback URL for M-Pesa (e.g., https://<api-id>.execute-api.<region>.amazonaws.com/<stage>/payment/callback)
   
   JWTSecret:
     Type: String
@@ -96,6 +99,16 @@ Resources:
   # Lambda Functions
   AuthFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-Auth-${Environment}'
       CodeUri: lambda/auth/
@@ -147,6 +160,16 @@ Resources:
 
   PaymentFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-Payment-${Environment}'
       CodeUri: lambda/payment/
@@ -195,6 +218,16 @@ Resources:
 
   CoAFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-CoA-${Environment}'
       CodeUri: lambda/coa/
@@ -212,6 +245,16 @@ Resources:
 
   PaymentCallbackProcessor:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-PaymentCallback-${Environment}'
       CodeUri: lambda/payment/
@@ -241,6 +284,16 @@ Resources:
 
   PackageFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-Package-${Environment}'
       CodeUri: lambda/package/
@@ -283,6 +336,16 @@ Resources:
 
   SessionFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
     Properties:
       FunctionName: !Sub 'WiFiBilling-Session-${Environment}'
       CodeUri: lambda/session/

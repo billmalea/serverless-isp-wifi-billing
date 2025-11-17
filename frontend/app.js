@@ -1,5 +1,5 @@
-// API Configuration
-const API_BASE_URL = 'https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/prod';
+// API Configuration - loaded from config.js
+const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || 'http://localhost:3000/dev';
 
 // State
 let selectedPackage = null;
@@ -55,7 +55,7 @@ function displayPackages(packages) {
         card.className = 'package-card';
         card.onclick = () => selectPackage(pkg);
         
-        const isPopular = pkg.id === 'standard';
+        const isPopular = pkg.name === 'Standard';
         
         card.innerHTML = `
             ${isPopular ? '<div class="package-badge">POPULAR</div>' : ''}
@@ -110,7 +110,7 @@ async function initiatePayment() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 phoneNumber,
-                packageId: selectedPackage.id,
+                packageId: selectedPackage.packageId,
                 ...deviceInfo,
             }),
         });

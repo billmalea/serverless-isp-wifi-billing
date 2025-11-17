@@ -130,7 +130,7 @@ async function listPackages() {
   console.log(`\nListing packages from: ${PACKAGES_TABLE}\n`);
 
   try {
-    const result = await docClient.send(new BatchWriteCommand({
+    await docClient.send(new BatchWriteCommand({
       RequestItems: {
         [PACKAGES_TABLE]: []
       }

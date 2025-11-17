@@ -1,4 +1,4 @@
-# 🌐 Serverless WiFi Billing System for Kenya
+# 🌐 Serverless ISP WiFi Billing System 
 
 A fully serverless, scalable, and production-ready WiFi hotspot billing system built on AWS, featuring M-Pesa payment integration optimized for the Kenyan market.
 
