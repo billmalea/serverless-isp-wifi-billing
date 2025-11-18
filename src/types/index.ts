@@ -48,8 +48,11 @@ export interface Transaction {
 }
 
 export interface Voucher {
-  voucherCode: string;
+  voucherId?: string;
+  voucherCode?: string; // Deprecated - use code instead
+  code?: string;
   packageId: string;
+  packageName?: string;
   status: 'unused' | 'used' | 'expired';
   createdAt: string;
   expiresAt?: string;
@@ -170,6 +173,19 @@ export interface GatewayConfig {
   radiusSecret?: string;
   coaPort: number;
   status: 'active' | 'inactive';
+}
+
+export interface Gateway {
+  gatewayId: string;
+  name: string;
+  location?: string;
+  ipAddress: string;
+  nasIdentifier: string;
+  radiusSecret: string;
+  status: 'online' | 'offline';
+  createdAt: string;
+  updatedAt: string;
+  activeUsers?: number;
 }
 
 // Environment variables interface

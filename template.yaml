@@ -395,6 +395,112 @@ Resources:
             Path: /api/sessions/terminate
             Method: POST
 
+  AdminFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints:
+          - index.ts
+        External:
+          - '@aws-sdk/*'
+    Properties:
+      FunctionName: !Sub 'WiFiBilling-Admin-${Environment}'
+      CodeUri: lambda/admin/
+      Handler: index.handler
+      Description: Admin management operations (dashboard, users, transactions, vouchers, gateways)
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VouchersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PackagesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GatewaysTable
+        - CloudWatchPutMetricPolicy: {}
+      Events:
+        Dashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/dashboard
+            Method: GET
+        ListUsers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/users
+            Method: GET
+        GetUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/users/{id}
+            Method: GET
+        ListSessions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/sessions
+            Method: GET
+        TerminateSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/sessions/{id}/terminate
+            Method: POST
+        ListTransactions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/transactions
+            Method: GET
+        GenerateVouchers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/vouchers/generate
+            Method: POST
+        ListVouchers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/vouchers
+            Method: GET
+        ListGateways:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/gateways
+            Method: GET
+        CreateGateway:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/gateways
+            Method: POST
+        UpdateGateway:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/gateways/{id}
+            Method: PUT
+        DeleteGateway:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /admin/gateways/{id}
+            Method: DELETE
+
   # DynamoDB Tables
   UsersTable:
     Type: AWS::DynamoDB::Table
