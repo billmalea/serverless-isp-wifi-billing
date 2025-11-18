@@ -1,25 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Search, Plus, Download, Copy, CheckCircle } from 'lucide-react'
+import { Search, Plus, Download, Copy, CheckCircle, RefreshCcw } from 'lucide-react'
+import { api } from '@/lib/api'
 
-interface Voucher {
-  id: string
-  code: string
-  packageName: string
+interface AdminVoucher {
+  voucherId?: string
+  code?: string
+  packageId: string
+  packageName?: string
   status: 'unused' | 'used' | 'expired'
-  batchId: string
   createdAt: string
-  usedBy: string | null
-  usedAt: string | null
+  expiresAt?: string
+  usedAt?: string
+  usedBy?: string
+  batchId?: string
 }
 
-interface Batch {
-  id: string
+interface GeneratedBatchSummary {
+  batchId: string
+  packageId: string
   packageName: string
   quantity: number
   createdAt: string
@@ -29,91 +33,72 @@ interface Batch {
 export default function VouchersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'unused' | 'used' | 'expired'>('all')
-  
-  const [vouchers] = useState<Voucher[]>([
-    {
-      id: '1',
-      code: 'WIFI-ABCD-1234',
-      packageName: 'Basic',
-      status: 'unused',
-      batchId: 'BATCH001',
-      createdAt: '2024-03-15T10:00:00Z',
-      usedBy: null,
-      usedAt: null,
-    },
-    {
-      id: '2',
-      code: 'WIFI-EFGH-5678',
-      packageName: 'Basic',
-      status: 'used',
-      batchId: 'BATCH001',
-      createdAt: '2024-03-15T10:00:00Z',
-      usedBy: '+254712345678',
-      usedAt: '2024-03-18T14:30:00Z',
-    },
-    {
-      id: '3',
-      code: 'WIFI-IJKL-9012',
-      packageName: 'Standard',
-      status: 'unused',
-      batchId: 'BATCH002',
-      createdAt: '2024-03-16T10:00:00Z',
-      usedBy: null,
-      usedAt: null,
-    },
-    {
-      id: '4',
-      code: 'WIFI-MNOP-3456',
-      packageName: 'Standard',
-      status: 'used',
-      batchId: 'BATCH002',
-      createdAt: '2024-03-16T10:00:00Z',
-      usedBy: '+254723456789',
-      usedAt: '2024-03-19T09:15:00Z',
-    },
-    {
-      id: '5',
-      code: 'WIFI-QRST-7890',
-      packageName: 'Premium',
-      status: 'unused',
-      batchId: 'BATCH003',
-      createdAt: '2024-03-17T10:00:00Z',
-      usedBy: null,
-      usedAt: null,
-    },
-  ])
+  const [vouchers, setVouchers] = useState<AdminVoucher[]>([])
+  const [packages, setPackages] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [batchSummary, setBatchSummary] = useState<GeneratedBatchSummary[]>([])
 
-  const [batches] = useState<Batch[]>([
-    {
-      id: 'BATCH001',
-      packageName: 'Basic',
-      quantity: 50,
-      createdAt: '2024-03-15T10:00:00Z',
-      unused: 38,
-    },
-    {
-      id: 'BATCH002',
-      packageName: 'Standard',
-      quantity: 30,
-      createdAt: '2024-03-16T10:00:00Z',
-      unused: 22,
-    },
-    {
-      id: 'BATCH003',
-      packageName: 'Premium',
-      quantity: 20,
-      createdAt: '2024-03-17T10:00:00Z',
-      unused: 18,
-    },
-  ])
+  const [form, setForm] = useState({
+    packageId: '',
+    quantity: '10',
+    expiryDays: '30'
+  })
+
+  async function loadData() {
+    try {
+      setLoading(true)
+      setError(null)
+      const [vData, pData] = await Promise.all([
+        api.admin.getVouchers(),
+        api.admin.getPackages('active')
+      ])
+      setVouchers(vData.vouchers || [])
+      setPackages(pData.packages || [])
+    } catch (err: any) {
+      setError(err.message || 'Failed to load vouchers')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.packageId) return
+    try {
+      setGenerating(true)
+      const res = await api.admin.generateVouchers({
+        packageId: form.packageId,
+        quantity: parseInt(form.quantity),
+        expiryDays: parseInt(form.expiryDays)
+      })
+      setForm({ packageId: '', quantity: '10', expiryDays: '30' })
+      setBatchSummary(prev => [{
+        batchId: res.batchId,
+        packageId: res.package.packageId,
+        packageName: res.package.name,
+        quantity: res.vouchers.length,
+        createdAt: new Date().toISOString(),
+        unused: res.vouchers.length
+      }, ...prev])
+      await loadData()
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate vouchers')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const filteredVouchers = vouchers.filter(voucher => {
-    const matchesSearch = 
-      voucher.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      voucher.packageName.toLowerCase().includes(searchQuery.toLowerCase())
-    
+    const code = voucher.code || voucher.voucherId || ''
+    const pkg = voucher.packageName || ''
+    const matchesSearch = code.toLowerCase().includes(searchQuery.toLowerCase()) || pkg.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesFilter = filter === 'all' || voucher.status === filter
-
     return matchesSearch && matchesFilter
   })
 
@@ -147,9 +132,9 @@ export default function VouchersPage() {
             Generate and manage WiFi access vouchers
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Generate Batch
+        <Button variant="outline" onClick={loadData} disabled={loading}>
+          <RefreshCcw className="mr-2 h-4 w-4" />
+          Refresh
         </Button>
       </div>
 
@@ -160,9 +145,7 @@ export default function VouchersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{vouchers.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Across {batches.length} batches
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Loaded vouchers</p>
           </CardContent>
         </Card>
         <Card>
@@ -170,9 +153,7 @@ export default function VouchersPage() {
             <CardTitle className="text-sm font-medium">Unused</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {vouchers.filter(v => v.status === 'unused').length}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{vouchers.filter(v => v.status === 'unused').length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Ready for use
             </p>
@@ -183,9 +164,7 @@ export default function VouchersPage() {
             <CardTitle className="text-sm font-medium">Used</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {vouchers.filter(v => v.status === 'used').length}
-            </div>
+            <div className="text-2xl font-bold">{vouchers.filter(v => v.status === 'used').length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Redeemed vouchers
             </p>
@@ -196,9 +175,7 @@ export default function VouchersPage() {
             <CardTitle className="text-sm font-medium">Redemption Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {((vouchers.filter(v => v.status === 'used').length / vouchers.length) * 100).toFixed(0)}%
-            </div>
+            <div className="text-2xl font-bold">{vouchers.length ? ((vouchers.filter(v => v.status === 'used').length / vouchers.length) * 100).toFixed(0) : 0}%</div>
             <p className="text-xs text-muted-foreground mt-1">
               Usage percentage
             </p>
@@ -208,52 +185,75 @@ export default function VouchersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Batches</CardTitle>
-          <CardDescription>
-            Overview of voucher batches generated
-          </CardDescription>
+          <CardTitle>Generate Voucher Batch</CardTitle>
+          <CardDescription>Create a new batch of vouchers for a package</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {batches.map((batch) => (
-              <div
-                key={batch.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{batch.id}</p>
-                    <Badge variant="outline">{batch.packageName}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Created: {new Date(batch.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-right">
-                    <p className="font-medium">{batch.quantity}</p>
-                    <p className="text-xs text-muted-foreground">Total</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium text-green-600">{batch.unused}</p>
-                    <p className="text-xs text-muted-foreground">Unused</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">{batch.quantity - batch.unused}</p>
-                    <p className="text-xs text-muted-foreground">Used</p>
-                  </div>
-                </div>
-
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
-                </Button>
-              </div>
-            ))}
-          </div>
+          <form onSubmit={handleGenerate} className="grid gap-4 md:grid-cols-5">
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={form.packageId}
+              onChange={(e) => setForm({ ...form, packageId: e.target.value })}
+              required
+            >
+              <option value="">Select Package</option>
+              {packages.map((p: any) => (
+                <option key={p.packageId} value={p.packageId}>{p.name}</option>
+              ))}
+            </select>
+            <input
+              className="border rounded px-2 py-1 text-sm"
+              type="number"
+              min={1}
+              max={500}
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+              placeholder="Quantity"
+              required
+            />
+            <input
+              className="border rounded px-2 py-1 text-sm"
+              type="number"
+              min={1}
+              max={365}
+              value={form.expiryDays}
+              onChange={(e) => setForm({ ...form, expiryDays: e.target.value })}
+              placeholder="Expiry (days)"
+              required
+            />
+            <Button type="submit" disabled={generating}>{generating ? 'Generating...' : 'Generate'}</Button>
+            <Button type="button" variant="outline" onClick={() => setForm({ packageId: '', quantity: '10', expiryDays: '30' })}>Reset</Button>
+          </form>
         </CardContent>
       </Card>
+
+      {batchSummary.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Generated Batches</CardTitle>
+            <CardDescription>Latest batches created this session</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {batchSummary.map(batch => (
+                <div key={batch.batchId} className="flex items-center justify-between p-3 border rounded">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{batch.batchId}</p>
+                      <Badge variant="outline">{batch.packageName}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Created: {new Date(batch.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-6 text-xs">
+                    <span>Total: {batch.quantity}</span>
+                    <span>Unused: {batch.unused}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -270,47 +270,41 @@ export default function VouchersPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant={filter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('all')}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={filter === 'unused' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('unused')}
-                >
-                  Unused
-                </Button>
-                <Button
-                  variant={filter === 'used' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('used')}
-                >
-                  Used
-                </Button>
+                {['all','unused','used','expired'].map(f => (
+                  <Button
+                    key={f}
+                    variant={filter === f ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilter(f as any)}
+                  >
+                    {f.charAt(0).toUpperCase()+f.slice(1)}
+                  </Button>
+                ))}
               </div>
             </div>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
+            {error && <div className="text-sm text-red-600">{error}</div>}
+            {loading && <div className="text-sm">Loading vouchers...</div>}
+            {!loading && filteredVouchers.length === 0 && !error && (
+              <div className="text-sm text-muted-foreground">No vouchers found.</div>
+            )}
             {filteredVouchers.map((voucher) => (
               <div
-                key={voucher.id}
+                key={(voucher.voucherId || voucher.code)!}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
               >
                 <div className="space-y-1 flex-1">
                   <div className="flex items-center gap-2">
-                    <code className="font-mono font-bold text-lg">{voucher.code}</code>
+                    <code className="font-mono font-bold text-lg">{voucher.code || voucher.voucherId}</code>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(voucher.code)}
+                      onClick={() => copyToClipboard(voucher.code || voucher.voucherId || '')}
                     >
-                      {copiedCode === voucher.code ? (
+                      {copiedCode === (voucher.code || voucher.voucherId) ? (
                         <CheckCircle className="h-4 w-4 text-green-600" />
                       ) : (
                         <Copy className="h-4 w-4" />
@@ -318,14 +312,12 @@ export default function VouchersPage() {
                     </Button>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>Batch: {voucher.batchId}</span>
-                    <span>Package: {voucher.packageName}</span>
+                    {voucher.batchId && <span>Batch: {voucher.batchId}</span>}
+                    <span>Package: {voucher.packageName || voucher.packageId}</span>
                     <span>Created: {new Date(voucher.createdAt).toLocaleDateString()}</span>
                   </div>
-                  {voucher.usedBy && (
-                    <div className="text-xs text-muted-foreground">
-                      Used by {voucher.usedBy} on {new Date(voucher.usedAt!).toLocaleDateString()}
-                    </div>
+                  {voucher.usedBy && voucher.usedAt && (
+                    <div className="text-xs text-muted-foreground">Used by {voucher.usedBy} on {new Date(voucher.usedAt).toLocaleDateString()}</div>
                   )}
                 </div>
 
