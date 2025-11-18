@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Search, Eye, Ban } from 'lucide-react'
 
 import { api } from '@/lib/api'
+import { UserDetailsModal } from '@/components/modals/UserDetailsModal'
 
 interface AdminUser {
   userId: string
@@ -27,6 +28,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
   async function loadUsers(search?: string) {
     try {
@@ -181,7 +183,11 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 ml-4">
-                  <Button variant="outline" size="sm" disabled>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedUserId(user.userId)}
+                  >
                     <Eye className="mr-2 h-4 w-4" />
                     View
                   </Button>
@@ -191,6 +197,13 @@ export default function UsersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {selectedUserId && (
+        <UserDetailsModal
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Edit, Trash2, Clock, Zap } from 'lucide-react'
 
 import { api } from '@/lib/api'
+import { EditPackageModal } from '@/components/modals/EditPackageModal'
 
 interface AdminPackage {
   packageId: string
@@ -25,6 +26,7 @@ export default function PackagesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editingPackage, setEditingPackage] = useState<AdminPackage | null>(null)
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -81,6 +83,11 @@ export default function PackagesPage() {
     } catch (err: any) {
       setError(err.message || 'Failed to deactivate package')
     }
+  }
+
+  async function handleEdit(packageId: string, data: Partial<AdminPackage>) {
+    await api.admin.updatePackage(packageId, data)
+    await fetchPackages()
   }
 
   return (
@@ -200,7 +207,7 @@ export default function PackagesPage() {
                     </Badge>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="flex-1" disabled>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditingPackage(pkg)}>
                       <Edit className="mr-2 h-3 w-3" />
                       Edit
                     </Button>
@@ -216,6 +223,20 @@ export default function PackagesPage() {
       </div>
 
       {/* Future: statistics component (requires transactions aggregation) */}
+
+      {editingPackage && (
+        <EditPackageModal
+          package={{
+            packageId: editingPackage.packageId,
+            name: editingPackage.name,
+            durationHours: editingPackage.durationHours,
+            price: editingPackage.priceKES,
+            bandwidth: `${editingPackage.bandwidthMbps}Mbps`
+          }}
+          onClose={() => setEditingPackage(null)}
+          onSave={handleEdit}
+        />
+      )}
     </div>
   )
 }

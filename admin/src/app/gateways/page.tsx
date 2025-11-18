@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit, Trash2, Wifi, WifiOff } from 'lucide-react'
 import { api } from '@/lib/api'
+import { EditGatewayModal } from '@/components/modals/EditGatewayModal'
 
 interface Gateway {
   gatewayId: string
@@ -23,6 +24,7 @@ export default function GatewaysPage() {
   const [gateways, setGateways] = useState<Gateway[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editingGateway, setEditingGateway] = useState<Gateway | null>(null)
 
   useEffect(() => {
     loadGateways()
@@ -51,6 +53,11 @@ export default function GatewaysPage() {
     } catch (err: any) {
       alert('Failed to delete gateway: ' + err.message)
     }
+  }
+
+  async function handleEdit(gatewayId: string, data: Partial<Gateway>) {
+    await api.admin.updateGateway(gatewayId, data)
+    await loadGateways()
   }
 
   if (loading) {
@@ -137,7 +144,12 @@ export default function GatewaysPage() {
                   </div>
                 )}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setEditingGateway(gateway)}
+                  >
                     <Edit className="mr-2 h-3 w-3" />
                     Edit
                   </Button>
@@ -194,6 +206,20 @@ export default function GatewaysPage() {
           </div>
         </CardContent>
       </Card>
+
+      {editingGateway && (
+        <EditGatewayModal
+          gateway={{
+            gatewayId: editingGateway.gatewayId,
+            name: editingGateway.name,
+            ipAddress: editingGateway.ipAddress,
+            radiusSecret: editingGateway.radiusSecret,
+            status: editingGateway.status
+          }}
+          onClose={() => setEditingGateway(null)}
+          onSave={handleEdit}
+        />
+      )}
     </div>
   )
 }
