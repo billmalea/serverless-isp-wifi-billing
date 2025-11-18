@@ -1,97 +1,65 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Search, Download, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { api } from '@/lib/api'
 
-interface Transaction {
-  id: string
+interface AdminTransaction {
+  transactionId: string
+  userId: string
   phoneNumber: string
   amount: number
+  packageId: string
   packageName: string
-  mpesaReceiptNumber: string
-  status: 'completed' | 'failed' | 'pending'
+  durationHours: number
+  bandwidthMbps: number
+  mpesaReceiptNumber?: string
+  mpesaTransactionId?: string
+  status: 'pending' | 'completed' | 'failed' | 'cancelled'
   timestamp: string
+  completedAt?: string
 }
 
 export default function TransactionsPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'pending'>('all')
-  
-  const [transactions] = useState<Transaction[]>([
-    {
-      id: '1',
-      phoneNumber: '+254712345678',
-      amount: 200,
-      packageName: 'Standard',
-      mpesaReceiptNumber: 'QGK8X7Y9Z2',
-      status: 'completed',
-      timestamp: '2024-03-20T14:30:00Z',
-    },
-    {
-      id: '2',
-      phoneNumber: '+254723456789',
-      amount: 500,
-      packageName: 'Premium',
-      mpesaReceiptNumber: 'QHL9Y8Z0A3',
-      status: 'completed',
-      timestamp: '2024-03-20T13:15:00Z',
-    },
-    {
-      id: '3',
-      phoneNumber: '+254734567890',
-      amount: 50,
-      packageName: 'Basic',
-      mpesaReceiptNumber: 'QIM0Z9A1B4',
-      status: 'completed',
-      timestamp: '2024-03-20T12:00:00Z',
-    },
-    {
-      id: '4',
-      phoneNumber: '+254745678901',
-      amount: 200,
-      packageName: 'Standard',
-      mpesaReceiptNumber: 'QJN1A0B2C5',
-      status: 'failed',
-      timestamp: '2024-03-20T11:45:00Z',
-    },
-    {
-      id: '5',
-      phoneNumber: '+254756789012',
-      amount: 1000,
-      packageName: 'Weekly',
-      mpesaReceiptNumber: 'QKO2B1C3D6',
-      status: 'completed',
-      timestamp: '2024-03-20T10:30:00Z',
-    },
-    {
-      id: '6',
-      phoneNumber: '+254767890123',
-      amount: 200,
-      packageName: 'Standard',
-      mpesaReceiptNumber: '',
-      status: 'pending',
-      timestamp: '2024-03-20T14:50:00Z',
-    },
-  ])
+  const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'pending' | 'cancelled'>('all')
+  const [transactions, setTransactions] = useState<AdminTransaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadTransactions() {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await api.admin.getTransactions()
+      setTransactions(data.transactions || [])
+    } catch (err: any) {
+      setError(err.message || 'Failed to load transactions')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadTransactions()
+  }, [])
 
   const filteredTransactions = transactions.filter(txn => {
-    const matchesSearch = 
-      txn.phoneNumber.includes(searchQuery) ||
-      txn.mpesaReceiptNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.packageName.toLowerCase().includes(searchQuery.toLowerCase())
-    
+    const q = searchQuery.trim().toLowerCase()
+    const matchesSearch = !q ||
+      txn.phoneNumber?.toLowerCase().includes(q) ||
+      txn.mpesaReceiptNumber?.toLowerCase().includes(q) ||
+      txn.packageName.toLowerCase().includes(q) ||
+      txn.transactionId.toLowerCase().includes(q)
     const matchesFilter = filter === 'all' || txn.status === filter
-
     return matchesSearch && matchesFilter
   })
 
-  const totalRevenue = transactions
-    .filter(t => t.status === 'completed')
-    .reduce((sum, t) => sum + t.amount, 0)
+  const totalRevenue = transactions.filter(t => t.status === 'completed').reduce((sum, t) => sum + t.amount, 0)
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -101,12 +69,14 @@ export default function TransactionsPage() {
         return <XCircle className="h-4 w-4" />
       case 'pending':
         return <Clock className="h-4 w-4" />
+      case 'cancelled':
+        return <XCircle className="h-4 w-4" />
       default:
         return null
     }
   }
 
-  const getStatusVariant = (status: string): 'success' | 'destructive' | 'warning' => {
+  const getStatusVariant = (status: string): 'success' | 'destructive' | 'warning' | 'secondary' => {
     switch (status) {
       case 'completed':
         return 'success'
@@ -114,6 +84,8 @@ export default function TransactionsPage() {
         return 'destructive'
       case 'pending':
         return 'warning'
+      case 'cancelled':
+        return 'secondary'
       default:
         return 'success'
     }
@@ -128,9 +100,9 @@ export default function TransactionsPage() {
             View and manage payment transactions
           </p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={loadTransactions} disabled={loading}>
           <Download className="mr-2 h-4 w-4" />
-          Export CSV
+          Refresh
         </Button>
       </div>
 
@@ -204,43 +176,30 @@ export default function TransactionsPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant={filter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('all')}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={filter === 'completed' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('completed')}
-                >
-                  Completed
-                </Button>
-                <Button
-                  variant={filter === 'pending' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('pending')}
-                >
-                  Pending
-                </Button>
-                <Button
-                  variant={filter === 'failed' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('failed')}
-                >
-                  Failed
-                </Button>
+                {['all','completed','pending','failed','cancelled'].map(f => (
+                  <Button
+                    key={f}
+                    variant={filter === f ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilter(f as any)}
+                  >
+                    {f.charAt(0).toUpperCase()+f.slice(1)}
+                  </Button>
+                ))}
               </div>
             </div>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
+            {error && <div className="text-sm text-red-600">{error}</div>}
+            {loading && <div className="text-sm">Loading transactions...</div>}
+            {!loading && filteredTransactions.length === 0 && !error && (
+              <div className="text-sm text-muted-foreground">No transactions found.</div>
+            )}
             {filteredTransactions.map((txn) => (
               <div
-                key={txn.id}
+                key={txn.transactionId}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
               >
                 <div className="flex items-center gap-4 flex-1">
@@ -254,9 +213,8 @@ export default function TransactionsPage() {
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span>Package: {txn.packageName}</span>
-                      {txn.mpesaReceiptNumber && (
-                        <span>Receipt: {txn.mpesaReceiptNumber}</span>
-                      )}
+                      {txn.mpesaReceiptNumber && <span>Receipt: {txn.mpesaReceiptNumber}</span>}
+                      <span>ID: {txn.transactionId.slice(0,8)}...</span>
                     </div>
                   </div>
                 </div>
@@ -280,42 +238,7 @@ export default function TransactionsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue by Package</CardTitle>
-          <CardDescription>
-            Breakdown of revenue by package type
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {['Basic', 'Standard', 'Premium', 'Weekly'].map((pkg) => {
-              const pkgTransactions = transactions.filter(
-                t => t.packageName === pkg && t.status === 'completed'
-              )
-              const pkgRevenue = pkgTransactions.reduce((sum, t) => sum + t.amount, 0)
-              const percentage = totalRevenue > 0 ? (pkgRevenue / totalRevenue * 100).toFixed(1) : 0
-
-              return (
-                <div key={pkg} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{pkg}</span>
-                    <span className="text-muted-foreground">
-                      {pkgTransactions.length} sales · KES {pkgRevenue.toLocaleString()} ({percentage}%)
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary rounded-full"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Future enhancement: dynamic revenue breakdown sourced from all packages */}
     </div>
   )
 }
