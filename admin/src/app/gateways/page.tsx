@@ -1,56 +1,74 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit, Trash2, Wifi, WifiOff } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface Gateway {
-  id: string
+  gatewayId: string
   name: string
   ipAddress: string
   nasIdentifier: string
   radiusSecret: string
   status: 'online' | 'offline'
   location: string
-  activeUsers: number
+  coaPort?: number
 }
 
 export default function GatewaysPage() {
-  const [gateways] = useState<Gateway[]>([
-    {
-      id: '1',
-      name: 'MikroTik Main Gateway',
-      ipAddress: '192.168.1.1',
-      nasIdentifier: 'main-gateway',
-      radiusSecret: '***************',
-      status: 'online',
-      location: 'Main Building',
-      activeUsers: 45,
-    },
-    {
-      id: '2',
-      name: 'MikroTik Branch Office',
-      ipAddress: '192.168.2.1',
-      nasIdentifier: 'branch-gateway',
-      radiusSecret: '***************',
-      status: 'online',
-      location: 'Branch Office',
-      activeUsers: 23,
-    },
-    {
-      id: '3',
-      name: 'MikroTik Warehouse',
-      ipAddress: '192.168.3.1',
-      nasIdentifier: 'warehouse-gateway',
-      radiusSecret: '***************',
-      status: 'offline',
-      location: 'Warehouse',
-      activeUsers: 0,
-    },
-  ])
+  const [gateways, setGateways] = useState<Gateway[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadGateways()
+  }, [])
+
+  async function loadGateways() {
+    try {
+      setLoading(true)
+      const data = await api.admin.getGateways()
+      setGateways(data)
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load gateways')
+      console.error('Gateways error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Are you sure you want to delete this gateway?')) return
+    
+    try {
+      await api.admin.deleteGateway(id)
+      await loadGateways()
+    } catch (err: any) {
+      alert('Failed to delete gateway: ' + err.message)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-muted-foreground">Loading gateways...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4">
+        <div className="text-destructive">Error: {error}</div>
+        <Button onClick={loadGateways}>Retry</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -67,9 +85,21 @@ export default function GatewaysPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {gateways.map((gateway) => (
-          <Card key={gateway.id}>
+      {gateways.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Wifi className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">No gateways configured yet</p>
+            <Button className="mt-4">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Your First Gateway
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {gateways.map((gateway) => (
+            <Card key={gateway.gatewayId}>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
@@ -98,20 +128,25 @@ export default function GatewaysPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">RADIUS Secret</p>
-                  <p className="text-sm font-mono">{gateway.radiusSecret}</p>
+                  <p className="text-sm font-mono">{'*'.repeat(15)}</p>
                 </div>
-                <div className="pt-2 border-t">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Active Users</span>
-                    <span className="font-semibold">{gateway.activeUsers}</span>
+                {gateway.coaPort && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">CoA Port</p>
+                    <p className="text-sm font-mono">{gateway.coaPort}</p>
                   </div>
-                </div>
+                )}
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" size="sm" className="flex-1">
                     <Edit className="mr-2 h-3 w-3" />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDelete(gateway.gatewayId)}
+                  >
                     <Trash2 className="mr-2 h-3 w-3" />
                     Delete
                   </Button>
@@ -119,8 +154,9 @@ export default function GatewaysPage() {
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -136,7 +172,7 @@ export default function GatewaysPage() {
               <Input defaultValue="10.0.0.50" />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">RADIUS Port</label>
+              <label className="text-sm font-medium">Auth Port</label>
               <Input defaultValue="1812" />
             </div>
             <div className="space-y-2">
@@ -148,6 +184,10 @@ export default function GatewaysPage() {
               <Input defaultValue="3799" />
             </div>
           </div>
+          <p className="text-sm text-muted-foreground">
+            These settings are used by all gateways to communicate with the billing system.
+            Configure each MikroTik router to point to this RADIUS server.
+          </p>
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline">Reset</Button>
             <Button>Save Configuration</Button>
