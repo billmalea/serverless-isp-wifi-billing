@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Save, Key, Server, Shield, Bell } from 'lucide-react'
+import { Save, Key, Server, Shield, Bell, AlertCircle } from 'lucide-react'
 
 export default function SettingsPage() {
-  const [mpesaSettings, setMpesaSettings] = useState({
+  const [mpesaSettings] = useState({
     consumerKey: '••••••••••••••••',
     consumerSecret: '••••••••••••••••',
     shortcode: '174379',
@@ -16,7 +16,7 @@ export default function SettingsPage() {
     callbackUrl: 'https://nazc3828ml.execute-api.us-east-1.amazonaws.com/dev/payment/callback',
   })
 
-  const [radiusSettings, setRadiusSettings] = useState({
+  const [radiusSettings] = useState({
     serverIp: '10.0.0.50',
     authPort: '1812',
     accountingPort: '1813',
@@ -24,7 +24,7 @@ export default function SettingsPage() {
     secret: '••••••••••••••••',
   })
 
-  const [systemSettings, setSystemSettings] = useState({
+  const [systemSettings] = useState({
     siteName: 'WiFi Billing Portal',
     supportEmail: 'support@example.com',
     supportPhone: '+254700000000',
@@ -40,6 +40,21 @@ export default function SettingsPage() {
           Configure system settings and integrations
         </p>
       </div>
+
+      <Card className="border-amber-200 bg-amber-50/50">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-amber-900">Configuration Management</p>
+              <p className="text-sm text-amber-800">
+                M-Pesa and RADIUS settings are managed via environment variables in the SAM template. 
+                To modify these values, update the <code className="px-1 py-0.5 bg-amber-100 rounded text-xs">template.yaml</code> file and redeploy the stack using <code className="px-1 py-0.5 bg-amber-100 rounded text-xs">sam deploy</code>.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -58,7 +73,8 @@ export default function SettingsPage() {
               <Input
                 type="password"
                 value={mpesaSettings.consumerKey}
-                onChange={(e) => setMpesaSettings({...mpesaSettings, consumerKey: e.target.value})}
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -66,14 +82,16 @@ export default function SettingsPage() {
               <Input
                 type="password"
                 value={mpesaSettings.consumerSecret}
-                onChange={(e) => setMpesaSettings({...mpesaSettings, consumerSecret: e.target.value})}
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Business Shortcode</label>
               <Input
                 value={mpesaSettings.shortcode}
-                onChange={(e) => setMpesaSettings({...mpesaSettings, shortcode: e.target.value})}
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
@@ -81,31 +99,26 @@ export default function SettingsPage() {
               <Input
                 type="password"
                 value={mpesaSettings.passkey}
-                onChange={(e) => setMpesaSettings({...mpesaSettings, passkey: e.target.value})}
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Callback URL</label>
               <Input
                 value={mpesaSettings.callbackUrl}
-                onChange={(e) => setMpesaSettings({...mpesaSettings, callbackUrl: e.target.value})}
+                disabled
+                className="bg-muted"
               />
             </div>
             <div className="flex items-center gap-2 pt-2">
               <Badge variant="success" className="flex items-center gap-1">
                 <div className="h-2 w-2 bg-green-600 rounded-full animate-pulse" />
-                Connected
+                Configured
               </Badge>
               <span className="text-xs text-muted-foreground">
-                Last verified: 2 minutes ago
+                Via environment variables
               </span>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button className="flex-1">
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </Button>
-              <Button variant="outline">Test Connection</Button>
             </div>
           </CardContent>
         </Card>
@@ -125,7 +138,8 @@ export default function SettingsPage() {
               <label className="text-sm font-medium">Server IP Address</label>
               <Input
                 value={radiusSettings.serverIp}
-                onChange={(e) => setRadiusSettings({...radiusSettings, serverIp: e.target.value})}
+                disabled
+                className="bg-muted"
                 placeholder="10.0.0.50"
               />
             </div>
@@ -134,21 +148,24 @@ export default function SettingsPage() {
                 <label className="text-sm font-medium">Auth Port</label>
                 <Input
                   value={radiusSettings.authPort}
-                  onChange={(e) => setRadiusSettings({...radiusSettings, authPort: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Acct Port</label>
                 <Input
                   value={radiusSettings.accountingPort}
-                  onChange={(e) => setRadiusSettings({...radiusSettings, accountingPort: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">CoA Port</label>
                 <Input
                   value={radiusSettings.coaPort}
-                  onChange={(e) => setRadiusSettings({...radiusSettings, coaPort: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
             </div>
@@ -157,25 +174,22 @@ export default function SettingsPage() {
               <Input
                 type="password"
                 value={radiusSettings.secret}
-                onChange={(e) => setRadiusSettings({...radiusSettings, secret: e.target.value})}
+                disabled
+                className="bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                Shared secret for gateway authentication
+                Shared secret configured per gateway
               </p>
             </div>
             <div className="flex items-center gap-2 pt-2">
               <Badge variant="success" className="flex items-center gap-1">
                 <div className="h-2 w-2 bg-green-600 rounded-full animate-pulse" />
-                Active
+                Configured
               </Badge>
               <span className="text-xs text-muted-foreground">
-                12 gateways connected
+                Managed via gateway settings
               </span>
             </div>
-            <Button className="w-full">
-              <Save className="mr-2 h-4 w-4" />
-              Save Configuration
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -197,7 +211,8 @@ export default function SettingsPage() {
                 <label className="text-sm font-medium">Site Name</label>
                 <Input
                   value={systemSettings.siteName}
-                  onChange={(e) => setSystemSettings({...systemSettings, siteName: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
               <div className="space-y-2">
@@ -205,14 +220,16 @@ export default function SettingsPage() {
                 <Input
                   type="email"
                   value={systemSettings.supportEmail}
-                  onChange={(e) => setSystemSettings({...systemSettings, supportEmail: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Support Phone</label>
                 <Input
                   value={systemSettings.supportPhone}
-                  onChange={(e) => setSystemSettings({...systemSettings, supportPhone: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
             </div>
@@ -222,7 +239,8 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   value={systemSettings.sessionTimeout}
-                  onChange={(e) => setSystemSettings({...systemSettings, sessionTimeout: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum session duration before auto-disconnect
@@ -233,7 +251,8 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   value={systemSettings.maxDevicesPerUser}
-                  onChange={(e) => setSystemSettings({...systemSettings, maxDevicesPerUser: e.target.value})}
+                  disabled
+                  className="bg-muted"
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum concurrent devices allowed per user
@@ -241,13 +260,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 mt-6">
-            <Button>
-              <Save className="mr-2 h-4 w-4" />
-              Save System Settings
-            </Button>
-            <Button variant="outline">Reset to Defaults</Button>
-          </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            System settings are read-only and configured during deployment. Future versions will support dynamic configuration.
+          </p>
         </CardContent>
       </Card>
 
