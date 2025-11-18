@@ -14,7 +14,7 @@ This system provides a complete **plug-and-play** solution for network providers
 ✅ **Time-Based Billing** - Unlimited data with time limits and bandwidth control  
 ✅ **JWT Authentication** - Secure user/admin role-based access  
 ✅ **Voucher System** - Generate and validate prepaid vouchers with MAC binding  
-✅ **Admin Dashboard** - Monitor users, transactions, and system health  
+✅ **Next.js Admin Dashboard** - Modern UI for managing gateways, users, packages, sessions, and more  
 ✅ **CloudWatch Metrics** - Real-time monitoring of payments and sessions  
 ✅ **99.9% Uptime** - Built on AWS managed services  
 ✅ **Auto-Expiry** - DynamoDB TTL for automatic session cleanup  
@@ -194,10 +194,25 @@ serverless-wifi-billing/
 │   ├── auth/                    # Authentication & voucher validation
 │   ├── payment/                 # M-Pesa payment processing
 │   └── coa/                     # Change of Authorization
-├── frontend/                    # Captive portal UI
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
+├── frontend/                    # Captive portal UI (static)
+│   ├── index.html              # User-facing portal with teal theme
+│   ├── styles.css              # Responsive design, Manrope font
+│   └── app.js                  # Payment flow, MAC-based session tracking
+├── admin/                       # Next.js admin dashboard
+│   ├── src/
+│   │   ├── app/                # App router pages
+│   │   │   ├── page.tsx       # Dashboard with stats
+│   │   │   ├── gateways/      # MikroTik/RADIUS configuration
+│   │   │   ├── packages/      # Package management
+│   │   │   ├── users/         # User management
+│   │   │   ├── sessions/      # Session monitoring
+│   │   │   ├── transactions/  # Payment history
+│   │   │   ├── vouchers/      # Voucher generation
+│   │   │   └── settings/      # System settings
+│   │   ├── components/        # UI components (shadcn-style)
+│   │   └── lib/               # API client & utilities
+│   ├── package.json
+│   └── README.md              # Admin setup instructions
 ├── src/                         # Shared TypeScript code
 │   ├── types/                   # Type definitions
 │   └── utils/                   # Helper functions
@@ -306,18 +321,45 @@ Packages are stored in DynamoDB and managed via admin API endpoints.
 - `GET /payment/status` - Check payment status
 - `GET /payment/packages` - List active packages
 
-### Packages (Public list, Admin CRUD)
-- `GET /api/packages` - List active packages (public)
-- `GET /api/admin/packages` - List all packages (admin only)
-- `POST /api/admin/packages` - Create package (admin only)
-- `PUT /api/admin/packages/{id}` - Update package (admin only)
-- `DELETE /api/admin/packages/{id}` - Delete/deactivate package (admin only)
-
-### Session Management (Admin Only)
-- `GET /api/sessions` - List all active sessions (admin only)
-- `POST /api/sessions/terminate` - Terminate any session (admin only)
+### Admin Management
+- `GET /admin/packages` - List all packages (admin only)
+- `POST /admin/packages` - Create package (admin only)
+- `PUT /admin/packages/{id}` - Update package (admin only)
+- `DELETE /admin/packages/{id}` - Delete package (admin only)
+- `GET /admin/users` - List users with activity (admin only)
+- `GET /admin/sessions` - List all sessions (admin only)
+- `POST /admin/sessions/{id}/terminate` - Disconnect session (admin only)
+- `GET /admin/transactions` - Payment history (admin only)
+- `POST /admin/vouchers/generate` - Generate voucher batch (admin only)
+- `GET /admin/vouchers` - List all vouchers (admin only)
+- `GET /admin/gateways` - List gateways (admin only)
+- `POST /admin/gateways` - Add gateway (admin only)
+- `GET /admin/dashboard` - Dashboard statistics (admin only)
 
 **Note**: Admin endpoints require JWT with `admin` role in Authorization header.
+
+## 🎨 Admin Dashboard
+
+The Next.js admin dashboard provides a modern interface for system management:
+
+**Features:**
+- 📊 Dashboard with real-time statistics
+- 🌐 MikroTik gateway & RADIUS configuration
+- 📦 Package management (CRUD operations)
+- 👥 User management with activity tracking
+- 🔄 Active session monitoring & disconnect
+- 💳 Transaction history with M-Pesa receipts
+- 🎟️ Voucher generation & management
+- ⚙️ System settings (M-Pesa, RADIUS, notifications)
+
+**Quick Start:**
+```bash
+cd admin
+npm install
+npm run dev  # Runs on http://localhost:3001
+```
+
+See **[admin/README.md](admin/README.md)** for detailed setup and deployment instructions.
 
 ## 🧪 Testing
 
