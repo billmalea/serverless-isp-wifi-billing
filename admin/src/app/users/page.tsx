@@ -1,77 +1,56 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Search, Eye, Ban } from 'lucide-react'
 
-interface User {
-  id: string
+import { api } from '@/lib/api'
+
+interface AdminUser {
+  userId: string
   phoneNumber: string
-  email: string | null
-  totalSpent: number
+  createdAt: string
+  lastLoginAt?: string
+  status: 'active' | 'suspended' | 'inactive'
+  // Enriched fields
   activeSessions: number
   totalSessions: number
-  joinedAt: string
+  totalSpent: number
   lastSeen: string
-  status: 'active' | 'blocked'
 }
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [users] = useState<User[]>([
-    {
-      id: '1',
-      phoneNumber: '+254712345678',
-      email: 'user1@example.com',
-      totalSpent: 1250,
-      activeSessions: 1,
-      totalSessions: 15,
-      joinedAt: '2024-01-15',
-      lastSeen: '2024-03-20',
-      status: 'active',
-    },
-    {
-      id: '2',
-      phoneNumber: '+254723456789',
-      email: null,
-      totalSpent: 850,
-      activeSessions: 0,
-      totalSessions: 8,
-      joinedAt: '2024-02-01',
-      lastSeen: '2024-03-18',
-      status: 'active',
-    },
-    {
-      id: '3',
-      phoneNumber: '+254734567890',
-      email: 'user3@example.com',
-      totalSpent: 2100,
-      activeSessions: 2,
-      totalSessions: 24,
-      joinedAt: '2023-12-10',
-      lastSeen: '2024-03-20',
-      status: 'active',
-    },
-    {
-      id: '4',
-      phoneNumber: '+254745678901',
-      email: null,
-      totalSpent: 500,
-      activeSessions: 0,
-      totalSessions: 5,
-      joinedAt: '2024-03-01',
-      lastSeen: '2024-03-10',
-      status: 'blocked',
-    },
-  ])
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredUsers = users.filter(user =>
-    user.phoneNumber.includes(searchQuery) ||
-    user.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  async function loadUsers(search?: string) {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await api.admin.getUsers(search)
+      setUsers(data.users || [])
+    } catch (err: any) {
+      setError(err.message || 'Failed to load users')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    loadUsers(searchQuery.trim() || undefined)
+  }
+
+  const filteredUsers = users // backend search already applied optionally
 
   return (
     <div className="space-y-6">
@@ -84,6 +63,14 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="text-sm text-red-600">{error}</div>
+      )}
+
+      {loading && (
+        <div className="text-sm">Loading users...</div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
@@ -91,9 +78,7 @@ export default function UsersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {users.filter(u => u.status === 'active').length} active
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{users.filter(u => u.status === 'active').length} active</p>
           </CardContent>
         </Card>
         <Card>
@@ -141,38 +126,42 @@ export default function UsersPage() {
         <CardHeader>
           <CardTitle>All Users</CardTitle>
           <CardDescription>
-            <div className="flex items-center gap-2 mt-2">
+            <form onSubmit={handleSearch} className="flex items-center gap-2 mt-2">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by phone or email..."
+                  placeholder="Search by phone number..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8"
                 />
               </div>
-            </div>
+              <Button type="submit" variant="outline" size="sm">Search</Button>
+              {searchQuery && (
+                <Button type="button" variant="outline" size="sm" onClick={() => { setSearchQuery(''); loadUsers(); }}>Clear</Button>
+              )}
+            </form>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {!loading && filteredUsers.length === 0 && (
+              <div className="text-sm text-muted-foreground">No users found.</div>
+            )}
             {filteredUsers.map((user) => (
               <div
-                key={user.id}
+                key={user.userId}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
               >
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{user.phoneNumber}</p>
-                    <Badge variant={user.status === 'active' ? 'success' : 'destructive'}>
+                    <Badge variant={user.status === 'active' ? 'success' : 'secondary'}>
                       {user.status}
                     </Badge>
                   </div>
-                  {user.email && (
-                    <p className="text-sm text-muted-foreground">{user.email}</p>
-                  )}
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>Joined: {new Date(user.joinedAt).toLocaleDateString()}</span>
+                    <span>Joined: {new Date(user.createdAt).toLocaleDateString()}</span>
                     <span>Last seen: {new Date(user.lastSeen).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -191,17 +180,11 @@ export default function UsersPage() {
                     <p className="text-xs text-muted-foreground">Total sessions</p>
                   </div>
                 </div>
-
                 <div className="flex gap-2 ml-4">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" disabled>
                     <Eye className="mr-2 h-4 w-4" />
                     View
                   </Button>
-                  {user.status === 'active' && (
-                    <Button variant="outline" size="sm">
-                      <Ban className="h-4 w-4" />
-                    </Button>
-                  )}
                 </div>
               </div>
             ))}
