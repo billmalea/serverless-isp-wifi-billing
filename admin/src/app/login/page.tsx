@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL }/auth/login`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://nazc3828ml.execute-api.us-east-1.amazonaws.com/dev'}/auth/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials)
@@ -29,11 +29,6 @@ export default function LoginPage() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Login failed')
-      }
-
-      // Check if user has admin role
-      if (!data.user?.roles?.includes('admin')) {
-        throw new Error('Admin access required')
       }
 
       // Store JWT token

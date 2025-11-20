@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Search, Download, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { downloadCSV } from '@/lib/export'
 import { api } from '@/lib/api'
 
 interface AdminTransaction {
@@ -100,10 +101,32 @@ export default function TransactionsPage() {
             View and manage payment transactions
           </p>
         </div>
-        <Button variant="outline" onClick={loadTransactions} disabled={loading}>
-          <Download className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadTransactions} disabled={loading}>
+            <Download className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (transactions.length === 0) return;
+              const rows = transactions.map(t => ({
+                transactionId: t.transactionId,
+                phoneNumber: t.phoneNumber,
+                packageName: t.packageName,
+                amount: t.amount,
+                status: t.status,
+                timestamp: t.timestamp,
+                receipt: t.mpesaReceiptNumber || '',
+              }));
+              downloadCSV(rows, { filename: `transactions-${Date.now()}.csv` });
+            }}
+            disabled={transactions.length === 0}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

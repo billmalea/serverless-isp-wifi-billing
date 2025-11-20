@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Search, Plus, Download, Copy, CheckCircle, RefreshCcw } from 'lucide-react'
+import { downloadCSV } from '@/lib/export'
 import { api } from '@/lib/api'
 
 interface AdminVoucher {
@@ -132,10 +133,33 @@ export default function VouchersPage() {
             Generate and manage WiFi access vouchers
           </p>
         </div>
-        <Button variant="outline" onClick={loadData} disabled={loading}>
-          <RefreshCcw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadData} disabled={loading}>
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button
+            variant="outline"
+            disabled={vouchers.length === 0}
+            onClick={() => {
+              if (vouchers.length === 0) return;
+              const rows = vouchers.map(v => ({
+                code: v.code || v.voucherId,
+                package: v.packageName || v.packageId,
+                status: v.status,
+                createdAt: v.createdAt,
+                expiresAt: v.expiresAt || '',
+                usedAt: v.usedAt || '',
+                usedBy: v.usedBy || '',
+                batchId: v.batchId || ''
+              }));
+              downloadCSV(rows, { filename: `vouchers-${Date.now()}.csv` });
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

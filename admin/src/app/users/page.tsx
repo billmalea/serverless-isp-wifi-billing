@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Search, Eye, Ban } from 'lucide-react'
+import { Search, Eye, Ban, Download } from 'lucide-react'
 
 import { api } from '@/lib/api'
+import { downloadCSV } from '@/lib/export'
 import { UserDetailsModal } from '@/components/modals/UserDetailsModal'
 
 interface AdminUser {
@@ -142,6 +143,29 @@ export default function UsersPage() {
               {searchQuery && (
                 <Button type="button" variant="outline" size="sm" onClick={() => { setSearchQuery(''); loadUsers(); }}>Clear</Button>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={filteredUsers.length === 0}
+                onClick={() => {
+                  if (filteredUsers.length === 0) return;
+                  const rows = filteredUsers.map(u => ({
+                    userId: u.userId,
+                    phoneNumber: u.phoneNumber,
+                    status: u.status,
+                    activeSessions: u.activeSessions,
+                    totalSessions: u.totalSessions,
+                    totalSpent: u.totalSpent,
+                    createdAt: u.createdAt,
+                    lastSeen: u.lastSeen,
+                  }));
+                  downloadCSV(rows, { filename: `users-${Date.now()}.csv` });
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
             </form>
           </CardDescription>
         </CardHeader>

@@ -141,6 +141,12 @@ Resources:
             QueueName: !GetAtt CoAQueue.QueueName
         - CloudWatchPutMetricPolicy: {}
       Events:
+        AdminLogin:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/admin/login
+            Method: POST
         Login:
           Type: Api
           Properties:

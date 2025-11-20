@@ -55,7 +55,9 @@ export async function handler(
     }
 
     // Route to appropriate handler
-    if (path.includes('/auth/login') && method === 'POST') {
+    if (path.includes('/auth/admin/login') && method === 'POST') {
+      return await handleAdminLogin(event);
+    } else if (path.includes('/auth/login') && method === 'POST') {
       return await handleLogin(event);
     } else if (path.includes('/auth/voucher') && method === 'POST') {
       return await handleVoucher(event);
@@ -136,6 +138,76 @@ async function handleLogin(event: APIGatewayProxyEvent): Promise<APIGatewayProxy
     return errorResponse(HTTP_STATUS.FORBIDDEN, 'No active package. Please purchase a package.', 'Payment required');
   } catch (error: any) {
     logger.error('Login failed', error);
+    return errorResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR, 'Authentication failed');
+  }
+}
+
+/**
+ * Handle admin login with password
+ */
+async function handleAdminLogin(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  const body = parseBody<{ phoneNumber: string; password: string }>(event.body);
+
+  if (!body || !body.phoneNumber || !body.password) {
+    return errorResponse(HTTP_STATUS.BAD_REQUEST, 'Phone number and password required');
+  }
+
+  try {
+    const phoneNumber = formatPhoneNumber(body.phoneNumber);
+
+    if (!isValidKenyanPhone(phoneNumber)) {
+      return errorResponse(HTTP_STATUS.BAD_REQUEST, 'Invalid Kenyan phone number');
+    }
+
+    // Get user
+    const user = await getItem<User>(USERS_TABLE, { phoneNumber });
+
+    if (!user) {
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, 'Invalid credentials');
+    }
+
+    // Verify user has admin role
+    if (!user.roles || !user.roles.includes('admin')) {
+      return errorResponse(HTTP_STATUS.FORBIDDEN, 'Admin access required');
+    }
+
+    // Verify password
+    if (!user.passwordHash) {
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, 'Password not set for this account');
+    }
+
+    const isValid = await verifyPassword(body.password, user.passwordHash);
+    if (!isValid) {
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, 'Invalid credentials');
+    }
+
+    // Update last login
+    await updateItem(USERS_TABLE, { phoneNumber }, { lastLoginAt: getCurrentTimestamp() });
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        sub: user.userId, 
+        phoneNumber: user.phoneNumber, 
+        roles: user.roles 
+      }, 
+      process.env.JWT_SECRET!, 
+      { expiresIn: '24h' }
+    );
+
+    logger.info('Admin login successful', { userId: user.userId, phoneNumber });
+
+    return successResponse({
+      token,
+      user: {
+        userId: user.userId,
+        phoneNumber: user.phoneNumber,
+        roles: user.roles,
+        status: user.status
+      }
+    });
+  } catch (error: any) {
+    logger.error('Admin login failed', error);
     return errorResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR, 'Authentication failed');
   }
 }
